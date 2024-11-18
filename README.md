@@ -1,1 +1,1 @@
-# Vx-Mamba
+Mamba accelerator in verilog
