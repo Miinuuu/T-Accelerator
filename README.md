@@ -14,5 +14,5 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
 
 ##u200 
 <p align="center">
-  <img src="u200.jpeg" width="1000" >>
+  <img src="u200.jpeg" width="200" >>
 </p>
