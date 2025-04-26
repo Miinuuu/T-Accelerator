@@ -5,14 +5,14 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
 
 ##Architecture (ongoing)
 <p align="center">
-  <img src="top_arch.png" width="1000" >>
+  <img src="top_arch.png" width="1000" >
 </p>
 
 <p align="center">
-  <img src="arch.png" width="1000" >>
+  <img src="arch.png" width="1000" >
 </p>
 
 ##Xilinx Alveo U200 FPGA 
 <p align="center">
-  <img src="u200.jpeg" width="300" >>
+  <img src="u200.jpeg" width="300" >
 </p>
