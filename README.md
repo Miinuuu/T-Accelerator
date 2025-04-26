@@ -4,3 +4,6 @@ The overall architecture—outlined schematically in the figure below—will com
 <p align="center">
   <img src="top_arch.png" width="1000" >>
 </p>
+<p align="center">
+  <img src="arch.png" width="1000" >>
+</p>
