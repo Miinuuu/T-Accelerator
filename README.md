@@ -12,7 +12,7 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
   <img src="arch.png" width="1000" >>
 </p>
 
-##u200 
+##Xilinx Alveo U200 FPGA 
 <p align="center">
-  <img src="u200.jpeg" width="200" >>
+  <img src="u200.jpeg" width="300" >>
 </p>
