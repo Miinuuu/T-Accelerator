@@ -5,7 +5,7 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
 
 ##Architecture (ongoing)
 <p align="center">
-  <img src="top_arch.png" width="1000" >
+  <img src="top_arch2.png" width="1000" >
 </p>
 
 <p align="center">
