@@ -9,9 +9,7 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
 </p>
 
 ##Hybrid-T-Accelerator (ongoing)
-<p align="center">
-  <img src="arch.png" width="1000" >
-</p>
+
 
 
 
