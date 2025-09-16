@@ -6,7 +6,7 @@ Development is currently underway on a Xilinx Alveo U200 FPGA-based platform.
 ##Hybrid-T-Accelerator (ongoing)
 <p align="center">
   <img src="sch.png" width="1000" >
-  <img src="arch2.png" width="1000" >
+  <img src="arch3.png" width="1000" >
 
 </p>
 
