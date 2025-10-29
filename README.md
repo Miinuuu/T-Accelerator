@@ -7,6 +7,8 @@
 <p align="center">
   <img src="fig/sch.png" width="1000" >
   <img src="fig/arch.png" width="1000" >
+  <img src="fig/top1.png" width="1000" >
+  <img src="fig/top2.png" width="1000" >
 
 </p>
 
