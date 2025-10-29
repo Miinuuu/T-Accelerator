@@ -13,6 +13,10 @@
 
   ##Tensor Core
   <img src="fig/top2.png" width="1000" >
+  ##interlink data movement core - instr and dram read
+  <img src="fig/sim_instr_dram_r.png" width="1000" >
+  ##interlink L2 SRAM WRITE / READ
+  <img src="fig/sim1_sram_rw.png" width="1000" >
 
 </p>
 
