@@ -107,7 +107,7 @@ flowchart TD
     WDMA -.->|DRAM Spill| MIC_DRAM
 
     %% Inter-SLR Crossing
-    TACC ==>|slr_credit_xing : 2-Hop Registered Credit Crossing (SLR2 to SLR0)| TBuf
+    TACC ==>|slr_credit_xing : 2-Hop Registered Credit Crossing SLR2 to SLR0| TBuf
 ```
 
 #### Detailed Hardware Subsystem Interconnect & Register Interface
