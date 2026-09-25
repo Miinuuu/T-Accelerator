@@ -10,9 +10,11 @@
 | Metric | Specification & Silicon Measurement | Details |
 |---|---|---|
 | **Target Platform** | **AMD / Xilinx Alveo U200** | `xcu200-fsgd2104-2-e` (Active Cooling) |
+| **Heterogeneous Co-Processing** | **Host CPU (Target) + FPGA (Drafter)** | **AMD Ryzen 9 9950X** (Target: Gemma 4 E2B Q8_0) + **Alveo U200** (Drafter: TiAccel MTP) |
+| **Speculative Inference Throughput** | **Up to 32.63 tok/s** (**1.77× speedup**) | CPU 9950X Target-Only 18.45 tok/s $\to$ Co-Processing 32.63 tok/s (Acceptance Length $\alpha = 2.50$) |
 | **Core Frequency** | **300.00 MHz** (`DATA_CLK`) | Vivado 2024.2 Physical Signoff (**WNS: +0.005 ns, TNS: 0.000 ns, 0 Violations**) |
 | **On-Board Token Latency** | **12.52 – 12.67 ms / token** | Measured on U200 hardware (W65 4-step chain, 528 tensors Bit-Exact PASS) |
-| **Decode Throughput** | **~80 tokens/s (78.9 – 79.9 tok/s)** | Single-stream decode throughput on silicon |
+| **Raw Decode Throughput** | **~80 tokens/s (78.9 – 79.9 tok/s)** | Single-stream decode throughput on silicon |
 | **On-Chip L2 SRAM Bandwidth** | **19.2 GB/s (Simplex) / 38.4 GB/s (Duplex)** | 512-bit @ 300 MHz, 1.000 beat/cycle saturation, Read 10-cycle ultra-low latency |
 | **Off-Chip DRAM Bandwidth** | **19.2 GB/s (Bus Peak) / 16.8 GB/s (Platform Limit)** | Dedicated m01_axi 512-bit @ 300 MHz (U200 single DDR4 bank limit: 16.8 GB/s) |
 | **Compute Core (TPU)** | **1,024 DSP48E2** | PM16 × TC128 Parallel Tree Engine (Stationary LUTRAM Weights, 16× CSA Tree Reducers) |
@@ -34,6 +36,7 @@ Conventional accelerators optimized for only one phase suffer from substantial m
 - **High-Density K19 Parallel Tree TPU (1,024 DSPs)**: PM16 × TC128 matrix multiplication engine with zero-cycle stationary LUTRAM weight banks and high-speed CSA reduction trees, accelerating large-scale GEMM/GEMV workloads with maximum compute density.
 - **20 MiB Tightly-Coupled On-Chip AXI SRAM (640 UltraRAMs)**: Stages KV Cache and intermediate activations directly on-chip, eliminating high-latency off-chip DRAM round-trips.
 - **Shared Unified Datapath**: Both dense matrix multiplications and attention mechanisms share an unbypassed, deterministic streaming datapath. A dedicated Special Function Unit Core (SFUC) accelerates non-linear activations (SiLU/GELU), RMSNorm normalization, and streaming ArgMax/TopK token sampling in a single pass.
+- **Heterogeneous Speculative Decoding Co-Processor (CPU 9950X Target + FPGA U200 Drafter)**: Collaboratively pairs the **AMD Ryzen 9 9950X** 16-core Host CPU (running Target model verification for **Gemma 4 E2B** via `llama.cpp` Q8_0) with the **AMD Alveo U200** FPGA accelerator (running the low-latency **Gemma 4 MTP Drafter** on TiAccel hardware). Achieves interactive serving at up to **32.63 tok/s** (**1.77× speedup** over CPU target alone) while guaranteeing 100% bit-exact output equivalence with target greedy generation.
 
 <p align="center">
   <img src="fig/u200.jpeg" width="380" alt="AMD Alveo U200 FPGA Platform">
@@ -369,9 +372,19 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
   - **Idle Host Machine**: **12.52 – 12.67 ms / token** (`replay_ms = 50.08 – 50.68 ms`, 528/528 tensors Bit-Exact PASS)
   - **Decode Throughput**: **78.9 – 79.9 tokens/s (~80 tok/s)**
   - **Under System Load (4-process regression running concurrently)**: 14.16 ms / token (70.6 tok/s)
-- **Gemma Speculative Decoding Silicon Evaluation (2026-09-25)**:
-  - Alveo U200 Standalone Token Draft Latency: **11.01 ms / round** (`replay_us = 9,950 µs`, `pack_ms = 0.19 ms`)
-  - Target-Draft Combined Real-Time Throughput: **31.22 decode tok/s** (Acceptance Length $\alpha = 2.182$)
+- **Gemma 4 E2B Heterogeneous Speculative Decoding Co-Processing (Host CPU 9950X + Alveo U200 FPGA)**:
+  - **Collaborative Architecture**:
+    - **Target Model (Verification)**: **Gemma 4 E2B** (Q8_0) executed on **Host CPU: AMD Ryzen 9 9950X** (16-Core / 32-Thread Zen 5, `llama.cpp` CPU-native engine with batch-invariant verify, 12 OpenMP threads).
+    - **Draft Model (Generation)**: **Gemma 4 Assistant (MTP) Drafter** executed on **FPGA: AMD Alveo U200** (TiAccel 300 MHz full pipeline with SINT4 QAT r4 weights, CDA compressed sint8 KV-cache, and fused projection launches).
+  - **End-to-End Silicon Serving Benchmarks (32 Prompts × 96 Tokens Evaluation)**:
+    - **Host CPU 9950X Target-Only Baseline**: **18.45 tok/s** (Verify latency: 54.4 ms / token).
+    - **CPU 9950X Target + U200 Drafter (K=3)**: **32.12 tok/s** (1.74× speedup, Acceptance Length $\alpha = 2.39$).
+    - **CPU 9950X Target + U200 Drafter (K=4, Stop Logit 2.9)**: **32.63 tok/s** (**1.77× speedup**, Acceptance Length $\alpha = 2.50$, Draft round latency: 14.1 ms, Verify latency: 61.5 ms).
+    - **FPGA Standalone Draft Latency**: ~3.6 ms / step (~11.01 ms / round for 3 steps, `replay_us = 9,950 µs`, `pack_ms = 0.19 ms`).
+    - **Mathematical Output Equivalence**: 100% bit-exact match with target-only greedy decoding across all benchmark prompts.
+  - **Live Terminal Interactive Session (`Figure 5: hello_world.png`)**:
+    - User prompt: `"hello world"` $\to$ Streamed response: `"Hello! 👋 \n\n **Hello, world!** \n\n How can I assist you today? ..."`
+    - Hardware telemetry: **40 tokens generated, Acceptance Length (AL) = 1.90, 24.8 tok/s sustained interactive throughput, prefill latency: 1,166 ms**.
 - **Off-Chip DRAM Bandwidth (`m01_axi`, DATA_CLK 300 MHz)**:
   - 512-bit AXI4 interface provides a theoretical bus peak of **19.2 GB/s** (300 MHz × 64 B), fully saturating up to the Alveo U200 single DDR4 bank hardware ceiling of **16.8 GB/s** (16,809.6 MB/s measured via `xrt-smi validate -r mem-bw`)
 - **Numerical Integrity & Reliability Verification**:
