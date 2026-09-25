@@ -368,11 +368,6 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
   <em>Figure 5. Real-Time End-to-End LLM Interactive Serving Live Demonstration on AMD Alveo U200 Silicon Hardware (Speculative Decoding with AMD Ryzen 9 9950X, ~29 tok/s)</em>
 </p>
 
-<p align="center">
-  <img src="fig/hello_world.png" width="900" alt="Live End-to-End LLM Generation on AMD Alveo U200 Silicon">
-  <br>
-  <em>Figure 6. Hardware Telemetry & Acceptance Length Snapshot (Speculative Decoding: 40 tokens, AL 1.90, 24.8 tok/s, prefill 1,166 ms)</em>
-</p>
 
 - **Decode Token Latency (W65 4-Step Chain Silicon Measurement)**:
   - **Idle Host Machine**: **12.52 – 12.67 ms / token** (`replay_ms = 50.08 – 50.68 ms`, 528/528 tensors Bit-Exact PASS)
@@ -392,8 +387,7 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
     - Launch command: `build/xrt/board/run_gemma.sh chat` (Target: Gemma 4 E2B on CPU 9950X, Drafter: TiAccel on U200, $K=4$).
     - User prompt: `"hello i'm fpga designer"` $\to$ Streamed response: `"That's great! FPGA design is a fascinating and highly in-demand field ... **How can I assist you today as an FPGA designer?**"`
     - Hardware telemetry: **171 tokens generated, Acceptance Length (AL) = 2.04, 28.5 tok/s sustained interactive throughput, prefill latency: 96 ms**.
-  - **Single-Turn Greeting Benchmark Snapshot (`Figure 6: hello_world.png`)**:
-    - Prompt: `"hello world"` $\to$ Response: `"Hello! 👋 \n\n **Hello, world!** ..."` (40 tokens, AL 1.90, 24.8 tok/s, prefill 1,166 ms).
+
 - **Off-Chip DRAM Bandwidth (`m01_axi`, DATA_CLK 300 MHz)**:
   - 512-bit AXI4 interface provides a theoretical bus peak of **19.2 GB/s** (300 MHz × 64 B), fully saturating up to the Alveo U200 single DDR4 bank hardware ceiling of **16.8 GB/s** (16,809.6 MB/s measured via `xrt-smi validate -r mem-bw`)
 - **Numerical Integrity & Reliability Verification**:

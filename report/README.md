@@ -118,7 +118,7 @@ The bitstream generated from this P&R run (`tiaccel_top.xclbin`, SHA-256 `7a3645
 > **Collaborative Co-Processing Setup (CPU 9950X + FPGA U200)**:
 > - **Target Model (Verification)**: **Gemma 4 E2B** running on **Host CPU: AMD Ryzen 9 9950X** (16-Core / 32-Thread Zen 5 via `llama.cpp` Q8_0, 12 OpenMP threads).
 > - **Draft Model (Generation)**: **Gemma 4 Assistant (MTP) Drafter** executed on **FPGA: AMD Alveo U200** (TiAccel 300 MHz, SINT4 QAT r4 weights, CDA compressed sint8 KV-cache).
-> - **Real-Time Interactive Serving**: Verified live on hardware in `fig/hello_world.png` (40 tokens, AL 1.90, 24.8 tok/s).
+> - **Real-Time Interactive Serving**: Verified live on hardware in `fig/demo.gif` (171 tokens, AL 2.04, 28.5 tok/s).
 
 ---
 
