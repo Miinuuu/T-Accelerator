@@ -363,9 +363,15 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 Measured on AMD Alveo U200 silicon hardware running the production bitstream (`tiaccel_top.xclbin`, DATA_CLK 300 MHz) with XRT 2.19.194:
 
 <p align="center">
+  <img src="fig/demo.gif" width="900" alt="Live End-to-End LLM Interactive Serving Demonstration on AMD Alveo U200 Silicon">
+  <br>
+  <em>Figure 5. Real-Time End-to-End LLM Interactive Serving Live Demonstration on AMD Alveo U200 Silicon Hardware (Speculative Decoding with AMD Ryzen 9 9950X, ~29 tok/s, <a href="fig/demo.mov">Original .MOV Video</a>)</em>
+</p>
+
+<p align="center">
   <img src="fig/hello_world.png" width="900" alt="Live End-to-End LLM Generation on AMD Alveo U200 Silicon">
   <br>
-  <em>Figure 5. Real-Time End-to-End LLM Inference Execution on AMD Alveo U200 Hardware (Speculative Decoding: 40 tokens, AL 1.90, 24.8 tok/s)</em>
+  <em>Figure 6. Hardware Telemetry & Acceptance Length Snapshot (Speculative Decoding: 40 tokens, AL 1.90, 24.8 tok/s, prefill 1,166 ms)</em>
 </p>
 
 - **Decode Token Latency (W65 4-Step Chain Silicon Measurement)**:
@@ -382,9 +388,12 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
     - **CPU 9950X Target + U200 Drafter (K=4, Stop Logit 2.9)**: **32.63 tok/s** (**1.77× speedup**, Acceptance Length $\alpha = 2.50$, Draft round latency: 14.1 ms, Verify latency: 61.5 ms).
     - **FPGA Standalone Draft Latency**: ~3.6 ms / step (~11.01 ms / round for 3 steps, `replay_us = 9,950 µs`, `pack_ms = 0.19 ms`).
     - **Mathematical Output Equivalence**: 100% bit-exact match with target-only greedy decoding across all benchmark prompts.
-  - **Live Terminal Interactive Session (`Figure 5: hello_world.png`)**:
-    - User prompt: `"hello world"` $\to$ Streamed response: `"Hello! 👋 \n\n **Hello, world!** \n\n How can I assist you today? ..."`
-    - Hardware telemetry: **40 tokens generated, Acceptance Length (AL) = 1.90, 24.8 tok/s sustained interactive throughput, prefill latency: 1,166 ms**.
+  - **Live Terminal Interactive Chat Demonstration (`Figure 5: demo.gif`)**:
+    - Launch command: `build/xrt/board/run_gemma.sh chat` (Target: Gemma 4 E2B on CPU 9950X, Drafter: TiAccel on U200, $K=4$).
+    - User prompt: `"hello i'm fpga designer"` $\to$ Streamed response: `"That's great! FPGA design is a fascinating and highly in-demand field ... **How can I assist you today as an FPGA designer?**"`
+    - Hardware telemetry: **171 tokens generated, Acceptance Length (AL) = 2.04, 28.5 tok/s sustained interactive throughput, prefill latency: 96 ms**.
+  - **Single-Turn Greeting Benchmark Snapshot (`Figure 6: hello_world.png`)**:
+    - Prompt: `"hello world"` $\to$ Response: `"Hello! 👋 \n\n **Hello, world!** ..."` (40 tokens, AL 1.90, 24.8 tok/s, prefill 1,166 ms).
 - **Off-Chip DRAM Bandwidth (`m01_axi`, DATA_CLK 300 MHz)**:
   - 512-bit AXI4 interface provides a theoretical bus peak of **19.2 GB/s** (300 MHz × 64 B), fully saturating up to the Alveo U200 single DDR4 bank hardware ceiling of **16.8 GB/s** (16,809.6 MB/s measured via `xrt-smi validate -r mem-bw`)
 - **Numerical Integrity & Reliability Verification**:
