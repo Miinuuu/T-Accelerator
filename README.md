@@ -302,6 +302,10 @@ TiAccel achieves timing closure at **300.00 MHz** on the AMD Alveo U200 (XCU200)
 
 ## 4. Hardware Implementation & Silicon Metrics
 
+> [!TIP]
+> **Complete Physical Signoff Evidence & Vivado Reports Available**:
+> All official AMD Vivado™ 2024.2 signoff reports (`.rpt`), including 300.00 MHz post-route timing closure (`WNS +0.005 ns`, 0 violations), 100% route completion status, full chip & kernel utilization, per-SLR Laguna SLL crossing analysis, hierarchical module breakdown (verifying 1,024 DSPs in TPU), power dissipation (49.26 W), and on-board silicon test results are documented in the [`report/`](report/README.md) directory.
+
 ### 4.1 Timing Signoff @ 300 MHz
 
 Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff stage across all 1.99 million endpoints with zero violations:
