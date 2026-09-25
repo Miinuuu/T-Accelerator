@@ -365,7 +365,7 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
 <p align="center">
   <img src="fig/demo.gif" width="900" alt="Live End-to-End LLM Interactive Serving Demonstration on AMD Alveo U200 Silicon">
   <br>
-  <em>Figure 5. Real-Time End-to-End LLM Interactive Serving Live Demonstration on AMD Alveo U200 Silicon Hardware (Speculative Decoding with AMD Ryzen 9 9950X, ~29 tok/s, <a href="fig/demo.mov">Original .MOV Video</a>)</em>
+  <em>Figure 5. Real-Time End-to-End LLM Interactive Serving Live Demonstration on AMD Alveo U200 Silicon Hardware (Speculative Decoding with AMD Ryzen 9 9950X, ~29 tok/s)</em>
 </p>
 
 <p align="center">
