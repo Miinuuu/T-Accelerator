@@ -359,6 +359,12 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 
 Measured on AMD Alveo U200 silicon hardware running the production bitstream (`tiaccel_top.xclbin`, DATA_CLK 300 MHz) with XRT 2.19.194:
 
+<p align="center">
+  <img src="fig/hello_world.png" width="900" alt="Live End-to-End LLM Generation on AMD Alveo U200 Silicon">
+  <br>
+  <em>Figure 5. Real-Time End-to-End LLM Inference Execution on AMD Alveo U200 Hardware (Speculative Decoding: 40 tokens, AL 1.90, 24.8 tok/s)</em>
+</p>
+
 - **Decode Token Latency (W65 4-Step Chain Silicon Measurement)**:
   - **Idle Host Machine**: **12.52 – 12.67 ms / token** (`replay_ms = 50.08 – 50.68 ms`, 528/528 tensors Bit-Exact PASS)
   - **Decode Throughput**: **78.9 – 79.9 tokens/s (~80 tok/s)**
