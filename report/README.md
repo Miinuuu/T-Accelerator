@@ -108,7 +108,7 @@ The bitstream generated from this P&R run (`tiaccel_top.xclbin`, SHA-256 `7a3645
 
 | Hardware Test Suite | Verification Type | Workload / Checks | Latency / Throughput | Silicon Result |
 | :--- | :--- | :--- | :--- | :---: |
-| **CDA** (Command Descriptor Array) | Bit-exact verification | 20 test vectors | 1.199 ms | **PASS 20/20** |
+| **CDA** (Compressed-Domain Attention) | Bit-exact verification | 20 test vectors | 1.199 ms | **PASS 20/20** |
 | **LM16** (Language Model 16-layer) | Golden Model Equivalence | 66 checks, top1 254995 | 0.556 ms | **PASS** |
 | **LM32** (Language Model 32-layer) | Full Attention + MLP | 130 checks, top1 255008 | 1.299 ms | **PASS** |
 | **LM32high** (High-Precision LM32) | Dynamic quantization stress | 130 checks, top1 255008 | 1.276 ms | **PASS** |
