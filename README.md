@@ -49,30 +49,205 @@ Conventional accelerators optimized for only one phase suffer from substantial m
 
 TiAccel maintains a deterministic, pipelined datapath from Host MMIO dispatch to final memory retirement:
 
+```mermaid
+flowchart TD
+    subgraph SLR0 ["SLR0 : Host Shell, Non-Linear SFUC & Token Sampling"]
+        direction TB
+        Host["Host CPU (PCIe Gen3x16 XDMA)"] --> Shell["Platform Shell & MMIO Control<br>(Two-DREG D0/D1, Write Elision)"]
+        Shell --> CTMaster["CT Master / GR Terminal Status"]
+        
+        subgraph SFUC_BOX ["SFUC : Special Function Unit Core (225 DSP48E2)"]
+            TBuf["2-Bank Tile Buffer (256-Beat T0/T1)"] --> XDA["XDA-LUT Engine (SiLU, GELU, Softmax)"]
+            XDA --> RMS["RMSNorm Engine (FP32 Sum-of-Squares & rsqrt)"]
+            RMS --> TopK["Streaming Ranker (sfuc_stream_rank)<br>32x44b Min-Heap Top-K (1..32) & ArgMax"]
+            TopK --> WDMA["WDMA Stream Engine"]
+        end
+    end
+
+    subgraph SLR1 ["SLR1 : Memory Interface Controller Hub & Interconnect"]
+        direction TB
+        MIC_SRAM["MIC-SP SRAM Controller (u_mic_sp)<br>512-bit @ 300 MHz (19.2 GB/s Simplex / 38.4 GB/s Duplex)<br>Credit-based 8R / 2W Arbiter, 10-Cycle Latency"]
+        MIC_DRAM["MIC-SP DRAM Controller (u_mic_sp_dram)<br>Dedicated m01_axi (512-bit @ 300 MHz, Outstanding 256)<br>Physical Peak: 19.2 GB/s | Platform Limit: 16.8 GB/s"]
+        
+        URAM["On-Chip L2 AXI SRAM<br>(20 MiB UltraRAM, 640 Blocks)"]
+        DDR["Off-Chip DDR4 SDRAM<br>(DDR Bank 0, m01_axi)"]
+        
+        MIC_SRAM <--> URAM
+        MIC_DRAM <--> DDR
+    end
+
+    subgraph SLR2 ["SLR2 : High-Density Dense Matrix & Vector Compute"]
+        direction TB
+        TDMC["TDMC / ILDMC Movement Controllers<br>(32B Atom Start Align, 4 KiB Split)"]
+        TUBUF["TUBUF : Tensor Unified Buffer<br>(1 MiB BRAM, 16 Banks, Read T5 / Write T2)"]
+        TOSC["TOSC : Operand Sequencer & Controller<br>(DF / WF Packing & Credit-Based Dispatch)"]
+        
+        subgraph TPU_BOX ["TPU : PM16 x TC128 Parallel Tree Matrix Engine (1,024 DSP48E2)"]
+            LUTRAM["Stationary Weight Bank<br>(8.5 KiB Zero-Cycle LUTRAM, SINT4 to INT8 Decode)"]
+            DSP_ARRAY["1,024 DSP48E2 Multiplier Array<br>(512 Leaves x 2 DSPs, Dual-Lane Pre-Adder Packing)"]
+            CSA_TREE["16x Parallel CSA Reduction Trees<br>(64-Pair 23-bit Dot Product Compression + C3 CPA)"]
+            LUTRAM --> DSP_ARRAY
+            DSP_ARRAY --> CSA_TREE
+        end
+        
+        TACC["TACC : Tensor Accumulator (64 DSP48E2)<br>16-Lane 32-bit Signed Saturation Accumulator<br>GPTQ Scale x Scale, Single-Cycle FP32 RNE"]
+        RSPU["RSPU : Rearrange & Transpose Unit<br>(FP16 D64xBK64 Attention V Transpose)"]
+        
+        TDMC --> TUBUF
+        TUBUF --> TOSC
+        TOSC --> TPU_BOX
+        TPU_BOX --> TACC
+        RSPU --> TUBUF
+    end
+
+    %% Memory & Dataflow Interconnects
+    URAM -.->|Activation / KV Fetch| TDMC
+    DDR -.->|Weight Streaming| TDMC
+    WDMA -.->|Result Writeback| MIC_SRAM
+    WDMA -.->|DRAM Spill| MIC_DRAM
+
+    %% Inter-SLR Crossing
+    TACC ==>|slr_credit_xing : 2-Hop Registered Credit Crossing (SLR2 to SLR0)| TBuf
+```
+
+#### Detailed Hardware Subsystem Interconnect & Register Interface
+
 ```text
-Host MMIO (Two-DREG Delta Write)
-  │
-  ▼
-[ILDMC / TDMC] ──► [TUBUF (1 MiB BRAM, 16-bank)]
-                          │
-                          ▼
-                       [TOSC] (DF Activations / WF Weights Packing & Dispatch)
-                          │
-                          ▼
-                       [TPU] (PM16 × TC128 Parallel Tree Matrix Engine, 1,024 DSP)
-                          │
-                          ▼
-                       [TACC] (16-Lane 32-bit Signed Accumulator, GPTQ Scales, FP32 RNE)
-                          │
-                          ▼
-                       [SFUC] (XDA-LUT SiLU/GELU, RMSNorm, Stream TopK/ArgMax)
-                          │
-                          ▼
-                      [MIC-SP] (Memory Interface Controller / Scratchpad)
-                       ┌──┴────────────────────────────────┐
-                       ▼                                   ▼
-             [On-Chip L2 AXI SRAM]                   [DDR0 DRAM]
-             (20 MiB URAM, Low Latency)             (m01_axi, 512-bit)
+========================================================================================================================
+                                     AMD / Xilinx Alveo U200 Platform (DATA_CLK 300.00 MHz)
+========================================================================================================================
+
+ ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │  SLR0 : Host Shell, Non-Linear Execution Core & Token Sampling                                                      │
+ │                                                                                                                    │
+ │  ┌──────────────────────────────────────────────┐        ┌──────────────────────────────────────────────────────┐  │
+ │  │ PCIe Gen3x16 Shell & Host Control Interface  │        │ SFUC (Special Function Unit Core, 225 DSP48E2)       │  │
+ │  │                                              │        │                                                      │  │
+ │  │  • XDMA / PCIe Subsystem (MMIO & DMA)        │        │  ┌────────────────────────────────────────────────┐  │  │
+ │  │  • Two-Descriptor (D0/D1) Ping-Pong Control │        │  │ Tile Buffer : 2-Bank 256-Beat SRAM (T0 / T1)   │  │  │
+ │  │  • Write Elision (Delta-Writing, 3.3x gain)  │        │  └───────────────────────┬────────────────────────┘  │  │
+ │  │  • Global Register (GR) 14 Terminal Bits     │        │                          ▼                           │  │
+ │  └──────────────────────┬───────────────────────┘        │  ┌────────────────────────────────────────────────┐  │  │
+ │                         │ MMIO Command                   │  │ XDA (Exponent-Direct Addressing) LUT Engine    │  │  │
+ │                         ▼                                │  │  • SiLU / GELU / Softmax (e^x, sum e^x, 1/sum) │  │  │
+ │                 ┌──────────────┐                         │  │  • Piecewise Linear Interpolation (y0 + t*dy)  │  │  │
+ │                 │  CT Master   │                         │  └───────────────────────┬────────────────────────┘  │  │
+ │                 └──────┬───────┘                         │                          ▼                           │  │
+ │                        │                                 │  ┌────────────────────────────────────────────────┐  │  │
+ │                        │                                 │  │ RMSNorm Engine : FP32 Sum-of-Squares & rsqrt   │  │  │
+ │                        │                                 │  └───────────────────────┬────────────────────────┘  │  │
+ │                        │                                 │                          ▼                           │  │
+ │                        │                                 │  ┌────────────────────────────────────────────────┐  │  │
+ │                        │                                 │  │ Streaming Ranker (sfuc_stream_rank)            │  │  │
+ │                        │                                 │  │  • 32x44-bit Hardware Min-Heap                 │  │  │
+ │                        │                                 │  │  • Cycle-by-Cycle Streaming Top-K (1..32)      │  │  │
+ │                        │                                 │  │  • Single-Pass ArgMax Token Extraction         │  │  │
+ │                        │                                 │  └───────────────────────┬────────────────────────┘  │  │
+ │                        │                                 │                          ▼                           │  │
+ │                        │                                 │  ┌────────────────────────────────────────────────┐  │  │
+ │                        │                                 │  │ WDMA Engine : Packed Result Writeback Streams  │  │  │
+ │                        │                                 │  └───────────────────────┬────────────────────────┘  │  │
+ │                        │                                 └──────────────────────────┼───────────────────────────┘  │
+ │                        │                                                            │ WDMA Data Stream             │
+ └────────────────────────┼────────────────────────────────────────────────────────────┼──────────────────────────────┘
+                          │                                                            │
+    ══════════════════════╪════════════════════════════════════════════════════════════╪══════════════ [SLR0 / SLR1 Boundary]
+                          │                                                            │
+ ┌────────────────────────┼────────────────────────────────────────────────────────────┼──────────────────────────────┐
+ │  SLR1 : Central Memory Interface & Multi-Client Arbitration Hub                             │                              │
+ │                        ▼                                                            │                              │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┴───────────────────────────┐  │
+ │  │ MIC-SP (Memory Interface Controller / Scratchpad)                                                            │  │
+ │  │                                                                                                              │  │
+ │  │  ┌──────────────────────────────────────────────────┐    ┌────────────────────────────────────────────────┐  │  │
+ │  │  │ u_mic_sp (On-Chip SRAM Controller, RAM_TYPE=0)   │    │ u_mic_sp_dram (Off-Chip DRAM Controller)       │  │  │
+ │  │  │  • 512-bit AXI4 @ 300 MHz                        │    │  • Dedicated m01_axi Port (512-bit @ 300 MHz)  │  │  │
+ │  │  │  • 1.000 Beat/Cycle Saturation (19.200 GB/s)     │    │  • Outstanding 256 Depth Transaction Queue     │  │  │
+ │  │  │  • Full-Duplex Saturation (38.400 GB/s Duplex)   │    │  • 4 KiB Boundary Splitting & 32B Atom Align   │  │  │
+ │  │  │  • Non-Blocking Pre-Reservation Arbiter          │    │  • Physical Bus Peak: 19.200 GB/s              │  │  │
+ │  │  │    (8 Read Clients + 2 Write Clients, Zero HOL)  │    │  • Platform DDR4 Bank Ceiling: 16.8 GB/s       │  │  │
+ │  │  │  • 10-Cycle Ultra-Low Read Latency               │    │  • Continuous Model Weight Streaming           │  │  │
+ │  │  └────────────────────────┬─────────────────────────┘    └───────────────────────┬────────────────────────┘  │  │
+ │  └───────────────────────────┼──────────────────────────────────────────────────────┼───────────────────────────┘  │
+ └──────────────────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────┘
+                                │                                                      │
+                                ▼                                                      ▼
+                   ┌──────────────────────────┐                          ┌──────────────────────────┐
+                   │  On-Chip L2 AXI SRAM     │                          │  Off-Chip DDR4 SDRAM     │
+                   │  (20 MiB UltraRAM, 640U) │                          │  (DDR Bank 0, m01_axi)   │
+                   │  • Distributed SLR0/1/2  │                          │  • Model Weights Storage │
+                   │  • KV Cache Zero Bubble  │                          │  • Scratch / Context IO  │
+                   └────────────┬─────────────┘                          └─────────────┬────────────┘
+                                │                                                      │
+                                └──────────────────────┬───────────────────────────────┘
+                                                       │ Activation / Weight Fetches (32B Atom Aligned)
+    ═══════════════════════════════════════════════════╪══════════════════════════════════════════════ [SLR1 / SLR2 Boundary]
+                                                       │
+ ┌─────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────┐
+ │  SLR2 : High-Density Dense Matrix & Vector Compute Engine                                                          │
+ │                                                     ▼                                                              │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │ Data Ingress & Buffering                                                                                     │  │
+ │  │                                                                                                              │  │
+ │  │  ┌───────────────────────────────────────────────┐     ┌──────────────────────────────────────────────────┐  │  │
+ │  │  │ ILDMC / TDMC Movement Controllers             │     │ TUBUF (Tensor Unified Buffer, 1 MiB BRAM)        │  │  │
+ │  │  │  • TFMC : Activation Stream Fetcher           │────►│  • 16 Independent Physical Banks (64B / Bank)    │  │  │
+ │  │  │  • TWMC : Quantized Weight Stream Fetcher     │     │  • 1,024 Rows x 64B per Bank (Conflict-Free)     │  │  │
+ │  │  │  • 32B Atom Start Align & Odd-Atom Tail Mask  │     │  • Read Latency: T5 / Write Latency: T2          │  │  │
+ │  │  └───────────────────────────────────────────────┘     └────────────────────────┬─────────────────────────┘  │  │
+ │  └─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────┘  │
+ │                                                                                    │                               │
+ │                                                                                    ▼                               │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │ TOSC (Tensor Operand Sequencer & Controller)                                                                 │  │
+ │  │  • Issues 64B Entry Vectors from TUBUF                                                                       │  │
+ │  │  • Formats Activation (DF) & Weight (WF) Streams                                                             │  │
+ │  │  • Credit-Based Dispatch Flow Control to TPU Engine                                                          │  │
+ │  └─────────────────────────────────────────────────┬────────────────────────────────────────────────────────────┘  │
+ │                                                    │ Activation DF Stream & Weight WF Stream                       │
+ │                                                    ▼                                                               │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │ TPU : PM16 x TC128 Parallel Tree Matrix Engine (1,024 DSP48E2)                                               │  │
+ │  │                                                                                                              │  │
+ │  │  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+ │  │  │ Stationary Weight Bank (8.5 KiB Zero-Cycle Distributed LUTRAM)                                          │  │  │
+ │  │  │  • Pre-Decoded Operands (wt_decode_int) : On-the-fly SINT4 -> INT8 Expansion (100% Shared Datapath)      │  │  │
+ │  │  └────────────────────────────────────────────────┬───────────────────────────────────────────────────────┘  │  │
+ │  │                                                   │ Stationary Pre-Decoded Weights                           │  │
+ │  │                                                   ▼                                                          │  │
+ │  │  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+ │  │  │ 1,024 DSP48E2 Parallel Multiplier Array (512x tpu_mac_int_mul_pair Leaves)                             │  │  │
+ │  │  │  • Geometry: 8 Lane-Pairs x 64 K-Cells (PM16 Output Lanes x TC128 Channel Depth)                       │  │  │
+ │  │  │  • Dual-Lane DSP Packing: Lane B packed 18-bit above Lane A in DSP Pre-Adder                           │  │  │
+ │  │  │  • Internal Cascade: PCOUT -> PCIN carries pair accumulation without external FPGA LUT fabric          │  │  │
+ │  │  └────────────────────────────────────────────────┬───────────────────────────────────────────────────────┘  │  │
+ │  │                                                   │ 512 Pair-Products (M2 Stage)                             │  │
+ │  │                                                   ▼                                                          │  │
+ │  │  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │  │
+ │  │  │ 16x Parallel CSA Reduction Trees (pm16_reducer_int & reduce_lane_int)                                   │  │  │
+ │  │  │  • Carry-Save Adder (CSA) Reduction Tree compresses 64 K-Cell products to 23-bit Dot Product           │  │  │
+ │  │  │  • C3 Carry-Propagate Adder (CPA) produces signed 32-bit Partial Sum                                   │  │  │
+ │  │  │  • Deterministic Fixed Pipeline Latency: Exactly 8 Clock Cycles from M2 to Result Seam                │  │  │
+ │  │  └────────────────────────────────────────────────┬───────────────────────────────────────────────────────┘  │  │
+ │  └───────────────────────────────────────────────────┼──────────────────────────────────────────────────────────┘  │
+ │                                                      │ 16 Lanes x 32-bit Dot Product Stream                        │
+ │                                                      ▼                                                             │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │ TACC (Tensor Accumulator, 64 DSP48E2)                                                                        │  │
+ │  │  • 16-Lane Parallel 32-bit Signed Saturation Accumulator (accm_int_sum_array)                                 │  │
+ │  │  • Inter-Tile Accumulation: Temporal accumulation over sequential K-dimension iterations                     │  │
+ │  │  • GPTQ Dequantization: Scale Scaling Engine (Activation Scale x Weight Scale)                               │  │
+ │  │  • Converter: Single-Cycle FP32 Round-to-Nearest-Even (RNE) Conversion                                       │  │
+ │  └────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────┘  │
+ │                           │                                                                                        │
+ │                           │ 512-bit FP32 Stream                                     ┌───────────────────────────┐  │
+ │                           ▼                                                         │ RSPU (Transpose Unit)     │  │
+ │  ┌──────────────────────────────────────────────────────────────────────────┐       │  • FP16 D64xBK64 Transpose│  │
+ │  │ slr_credit_xing : 2-Hop Registered Credit Crossing (SLR2 -> SLR1 -> SLR0)│       │  • Attention V Transpose  │  │
+ │  └────────────────────────┬─────────────────────────────────────────────────┘       └─────────────┬─────────────┘  │
+ └───────────────────────────┼───────────────────────────────────────────────────────────────────────┼────────────────┘
+                             │                                                                       │ Transposed V
+                             └───────────────────────────────────────────────────────────────────────┘ (to TUBUF)
 ```
 
 ### 2.2 Hardware Subsystem Schematic
