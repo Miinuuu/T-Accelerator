@@ -14,7 +14,7 @@
 | **On-Board Token Latency** | **12.52 – 12.67 ms / token** | Measured on U200 hardware (W65 4-step chain, 528 tensors Bit-Exact PASS) |
 | **Decode Throughput** | **~80 tokens/s (78.9 – 79.9 tok/s)** | Single-stream decode throughput on silicon |
 | **On-Chip L2 SRAM Bandwidth** | **19.2 GB/s (Simplex) / 38.4 GB/s (Duplex)** | 512-bit @ 300 MHz, 1.000 beat/cycle saturation, Read 10-cycle ultra-low latency |
-| **Off-Chip DRAM Bandwidth** | **Read 12.5 GB/s / Write 4.2 GB/s** | Dedicated `m01_axi` port, 512-bit bus, 65.1% effective efficiency (Outstanding 256) |
+| **Off-Chip DRAM Bandwidth** | **Read 12.5 GB/s (65.1%) / Write 19.2 GB/s (Peak)** | Hardware streaming read: 12.5 GB/s; Host PCIe XDMA ingest write: 4.2 GB/s |
 | **Compute Core (TPU)** | **1,024 DSP48E2** | K19 INT8/SINT4 high-density systolic array (PM16 matrix engine) |
 | **On-Chip L2 Memory** | **20 MiB UltraRAM (640 URAM)** | Distributed AXI SRAM for zero-latency local KV Cache & activation staging |
 | **Power Consumption** | **49.26 W** (Dynamic 45.51 W, Static 3.75 W) | Junction Temperature: 50.7 °C (Ample cooling headroom) |
@@ -94,7 +94,7 @@ Subsystems are interconnected through credit-based flow control and registered s
 - **On-Chip L2 AXI SRAM**: 640 UltraRAM blocks aggregated into a 20 MiB distributed AXI4 memory subsystem for zero-bubble KV Cache serving.
 - **MIC-SP (Memory Interface Controller / Scratchpad)**:
   - **On-Chip SRAM Controller (`u_mic_sp`, `RAM_TYPE=0`)**: 512-bit bus @ 300 MHz achieving **1.000 beat/cycle sustained bus saturation (19.2 GB/s)** with a 10-cycle fixed read latency. Supports credit-based pre-reservation for 8 read and 2 write clients without Head-of-Line (HOL) blocking.
-  - **Off-Chip DRAM Controller (`u_mic_sp_dram`, `RAM_TYPE=1`)**: Dedicated to DDR Bank 0 via `m01_axi` (512-bit AXI4, Outstanding 256), sustaining **12.5 GB/s Read (65.1% effective efficiency)** and **4.2 GB/s Write** for streaming large model weights.
+  - **Off-Chip DRAM Controller (`u_mic_sp_dram`, `RAM_TYPE=1`)**: Dedicated to DDR Bank 0 via `m01_axi` (512-bit AXI4, Outstanding 256), sustaining **12.5 GB/s Read streaming (65.1% efficiency)** with a **19.2 GB/s bus peak** (**4.2 GB/s Host PCIe XDMA ingest write**) for streaming large model weights.
 
 ---
 
@@ -188,7 +188,7 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
   - Alveo U200 Standalone Token Draft Latency: **11.01 ms / round** (`replay_us = 9,950 µs`, `pack_ms = 0.19 ms`)
   - Target-Draft Combined Real-Time Throughput: **31.22 decode tok/s** (Acceptance Length $\alpha = 2.182$)
 - **Off-Chip DRAM Bandwidth (`m01_axi`, DATA_CLK 300 MHz)**:
-  - 64-byte burst streaming sustains **Read 12.5 GB/s** (65.1% of theoretical peak), **Write 4.2 GB/s**
+  - 64-byte burst streaming sustains **Read 12.5 GB/s** (65.1% of 19.2 GB/s peak); **4.2 GB/s Host PCIe XDMA ingest write** (physical bus capacity 19.2 GB/s)
 - **Numerical Integrity & Reliability Verification**:
   - `cda` (20/20 bit-exact), `lm16` (66/66 checks), `lm32`/`lm32high` (130/130 checks) 100% Bit-Exact verified against golden oracle models
   - 64 MiB round-trip DRAM SHA256 checksum exact match (0 bit errors)
@@ -200,7 +200,7 @@ TiAccel isolates off-chip weight streaming and on-chip KV Cache/activation traff
 | Subsystem Channel | Controller Instance | Bus Width & Clock | Peak Bandwidth | Sustained / Measured Bandwidth | Latency | Primary Function & Characteristics |
 |---|---|---|---:|---:|:---:|---|
 | **On-Chip L2 AXI SRAM** | `u_mic_sp`<br>(`RAM_TYPE=0`) | 512-bit<br>@ 300 MHz | **19.2 GB/s** | **19.2 GB/s**<br>(**1.000 beat/cycle saturated**) | **10 cycles** | - 20 MiB distributed URAM (640 blocks)<br>- Zero-bubble KV Cache & activation serving<br>- Credit-based non-blocking multi-client arbiter |
-| **Off-Chip DDR0 DRAM** | `u_mic_sp_dram`<br>(`RAM_TYPE=1`) | 512-bit<br>@ 300 MHz | **19.2 GB/s** | **Read 12.5 GB/s** (65.1%)<br>**Write 4.2 GB/s** (21.8%) | Round-trip DRAM latency | - Dedicated `m01_axi` port (Outstanding 256)<br>- Streaming continuous weight matrices<br>- 4 KiB boundary splitting & 64B alignment |
+| **Off-Chip DDR0 DRAM** | `u_mic_sp_dram`<br>(`RAM_TYPE=1`) | 512-bit<br>@ 300 MHz | **19.2 GB/s** | **Read 12.5 GB/s** (65.1%)<br>**Write 19.2 GB/s** (Bus Peak)<br>*(4.2 GB/s Host XDMA ingest)* | Round-trip DRAM latency | - Dedicated `m01_axi` port (Outstanding 256)<br>- Streaming continuous weight matrices<br>- 4 KiB boundary splitting & 64B alignment |
 
 - **On-Chip L2 SRAM (`u_mic_sp`) 300 MHz Sweep Verification (14/14 Scenarios PASS)**:
   Measured across the production `axi_slv_sram` RTL at 300 MHz, 512-bit data path:
