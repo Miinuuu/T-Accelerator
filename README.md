@@ -15,7 +15,7 @@
 | **Decode Throughput** | **~80 tokens/s (78.9 – 79.9 tok/s)** | Single-stream decode throughput on silicon |
 | **On-Chip L2 SRAM Bandwidth** | **19.2 GB/s (Simplex) / 38.4 GB/s (Duplex)** | 512-bit @ 300 MHz, 1.000 beat/cycle saturation, Read 10-cycle ultra-low latency |
 | **Off-Chip DRAM Bandwidth** | **Read 12.5 GB/s (65.1%) / Write 19.2 GB/s (Peak)** | Hardware streaming read: 12.5 GB/s; Host PCIe XDMA ingest write: 4.2 GB/s |
-| **Compute Core (TPU)** | **1,024 DSP48E2** | K19 INT8/SINT4 high-density systolic array (PM16 matrix engine) |
+| **Compute Core (TPU)** | **1,024 DSP48E2** | PM16 × TC128 Parallel Tree Engine (Stationary LUTRAM Weights, 16× CSA Tree Reducers) |
 | **On-Chip L2 Memory** | **20 MiB UltraRAM (640 URAM)** | Distributed AXI SRAM for zero-latency local KV Cache & activation staging |
 | **Power Consumption** | **49.26 W** (Dynamic 45.51 W, Static 3.75 W) | Junction Temperature: 50.7 °C (Ample cooling headroom) |
 
@@ -31,7 +31,7 @@ Conventional accelerators optimized for only one phase suffer from substantial m
 
 **TiAccel (Transformer Integrated Accelerator)** is a heterogeneous neural processing architecture integrated on a single chip to address both bottlenecks simultaneously:
 
-- **High-Density K19 Systolic TPU (1,024 DSPs)**: Accelerates large-scale parallel GEMM workloads with maximum compute efficiency.
+- **High-Density K19 Parallel Tree TPU (1,024 DSPs)**: PM16 × TC128 matrix multiplication engine with zero-cycle stationary LUTRAM weight banks and high-speed CSA reduction trees, accelerating large-scale GEMM/GEMV workloads with maximum compute density.
 - **20 MiB Tightly-Coupled On-Chip AXI SRAM (640 UltraRAMs)**: Stages KV Cache and intermediate activations directly on-chip, eliminating high-latency off-chip DRAM round-trips.
 - **Shared Unified Datapath**: Both dense matrix multiplications and attention mechanisms share an unbypassed, deterministic streaming datapath. A dedicated Special Function Unit Core (SFUC) accelerates non-linear activations (SiLU/GELU), RMSNorm normalization, and streaming ArgMax/TopK token sampling in a single pass.
 
@@ -56,13 +56,13 @@ Host MMIO (Two-DREG Delta Write)
 [ILDMC / TDMC] ──► [TUBUF (1 MiB BRAM, 16-bank)]
                           │
                           ▼
-                       [TOSC] (DF Activations / WF Weights Packing)
+                       [TOSC] (DF Activations / WF Weights Packing & Dispatch)
                           │
                           ▼
-                       [TPU] (K19 INT8/SINT4 Systolic Matrix Core, 1024 DSP)
+                       [TPU] (PM16 × TC128 Parallel Tree Matrix Engine, 1,024 DSP)
                           │
                           ▼
-                       [TACC] (32-bit Signed Accumulator, GPTQ Scales, FP32 RNE)
+                       [TACC] (16-Lane 32-bit Signed Accumulator, GPTQ Scales, FP32 RNE)
                           │
                           ▼
                        [SFUC] (XDA-LUT SiLU/GELU, RMSNorm, Stream TopK/ArgMax)
@@ -85,11 +85,11 @@ Subsystems are interconnected through credit-based flow control and registered s
   <em>Figure 2. TiAccel Top-Level Architecture & Subsystem Interconnect Schematic</em>
 </p>
 
-- **TPU (Tensor Processing Unit Core)**: Systolic matrix multiplication engine integrating 1,024 DSP48E2 slices configured for K19 INT8/SINT4 computations (PM16).
-- **TUBUF (Tensor Unified Buffer)**: 1 MiB on-chip memory organized into 16 independent physical banks to guarantee conflict-free parallel tensor feeding.
-- **TOSC (Tensor Output Scaling & Conversion)**: Issues TUBUF entries and controls weight/activation packing.
-- **TACC (Tensor Accumulator)**: Performs 16-lane parallel 32-bit signed saturation accumulation (`accm_int_sum_array`, PM16 × 32-bit), GPTQ dequantization scaling, and single-cycle FP32 Round-to-Nearest-Even (RNE).
-- **SFUC (Special Function Unit Core)**: Implements hardware XDA-LUT for high-precision SiLU/GELU functions, RMSNorm normalization, and pipelined streaming TopK/ArgMax sampling (225 DSPs).
+- **TPU (Tensor Processing Unit Core)**: Parallel tree matrix multiplication engine configured with PM16 $\times$ TC128 geometry, integrating 1,024 DSP48E2 slices. Features an 8.5 KiB zero-cycle distributed LUTRAM stationary weight bank (supporting on-the-fly SINT4-to-INT8 expansion) and 16 parallel Carry-Save Adder (CSA) reduction trees to compute 128-element dot products per lane with deterministic 8-cycle latency.
+- **TUBUF (Tensor Unified Buffer)**: 1 MiB on-chip memory organized into 16 independent physical banks (1,024 rows $\times$ 64 B) to guarantee conflict-free parallel tensor feeding (Read latency: T5, Write latency: T2).
+- **TOSC (Tensor Operand Sequencer & Controller)**: Sequences TUBUF entries, packages activation (DF) and weight (WF) vectors, and manages credit-based dispatch to the TPU.
+- **TACC (Tensor Accumulator)**: 16-lane parallel 32-bit signed saturation accumulator (`accm_int_sum_array`, PM16 $\times$ 32-bit). Accumulates partial sums over sequential K-tiles, applies GPTQ dequantization scaling (activation scale $\times$ weight scale), and performs single-cycle FP32 Round-to-Nearest-Even (RNE).
+- **SFUC (Special Function Unit Core)**: Implements 2-bank 256-beat tile storage, hardware XDA (Exponent-Direct Addressing) LUT for high-precision SiLU/GELU/Softmax functions with linear interpolation, RMSNorm normalization, and pipelined streaming TopK/ArgMax sampling with a 32$\times$44-bit Min-heap (225 DSPs).
 - **RSPU (Rearrange & Transpose Unit)**: Dedicated hardware for fixed-dimension matrix transposition (FP16 $V$-matrix transpose) in FlashAttention/PagedAttention workloads.
 - **On-Chip L2 AXI SRAM**: 640 UltraRAM blocks aggregated into a 20 MiB distributed AXI4 memory subsystem for zero-bubble KV Cache serving.
 - **MIC-SP (Memory Interface Controller / Scratchpad)**:
@@ -163,7 +163,7 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 | Module Instance | Primary SLR | LUTs | FFs | BRAM Tile | URAM | DSP48E2 | Primary Function |
 |---|---|---:|---:|---:|---:|---:|---|
 | **SFUC** | SLR0 | 138,659 | 124,225 | 71.0 | 0 | 225 | Non-linear activation, RMSNorm, Stream TopK/ArgMax |
-| **TPU** | SLR2 | 37,366 | 42,354 | 0.0 | 0 | 1,024 | K19 INT8/SINT4 systolic matrix multiplication engine |
+| **TPU** | SLR2 | 37,366 | 42,354 | 0.0 | 0 | 1,024 | PM16 × TC128 parallel tree matrix engine (stationary LUTRAM, CSA tree) |
 | **MIC-SP (DRAM)** | SLR1 | 29,422 | 52,577 | 124.0 | 0 | 0 | Off-chip DDR0 DRAM DMA control & arbitration |
 | **MIC-SP (SRAM)** | SLR1 | 26,926 | 51,099 | 124.0 | 0 | 0 | On-chip L2 AXI SRAM arbitration & buffers |
 | **TACC** | SLR2 | 23,487 | 22,484 | 38.0 | 0 | 64 | 32-bit signed saturation accumulation, GPTQ scale, FP32 RNE |
