@@ -11,7 +11,7 @@ All reports were produced directly by **AMD Vivado™ Design Suite v2024.2 (lin6
 | Metric | Target / Specification | Vivado Physical Signoff | Status | Authoritative Report |
 | :--- | :--- | :--- | :---: | :--- |
 | **Target Device** | AMD Alveo U200 PCIe | `xcu200-fsgd2104-2-e` | PASS | [`system_estimate_tiaccel_top.txt`](system_estimate_tiaccel_top.txt) |
-| **Kernel Clock Frequency** | **300.00 MHz** (`T = 3.333 ns`) | **300.030 MHz** (`T = 3.333 ns`) | PASS | [`timing_summary_head.rpt`](timing_summary_head.rpt) |
+| **Kernel Clock Frequency** | **300.00 MHz** (`T = 3.333 ns`) | **300.030 MHz** (`T = 3.333 ns`) | PASS | [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) |
 | **Worst Negative Slack (WNS)** | $> 0.000\text{ ns}$ | **+0.005 ns** | PASS | [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) |
 | **Total Negative Slack (TNS)** | $0.000\text{ ns}$ | **0.000 ns** (0 failing endpoints / 1,995,114) | PASS | [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) |
 | **Worst Hold Slack (WHS)** | $> 0.000\text{ ns}$ | **+0.006 ns** | PASS | [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) |
@@ -126,14 +126,11 @@ The bitstream generated from this P&R run (`tiaccel_top.xclbin`, SHA-256 `7a3645
 
 | Report File | File Size | Description & Key Evidence |
 | :--- | :---: | :--- |
-| [`timing_summary_head.rpt`](timing_summary_head.rpt) | 49 KB | Fast-preview summary of timing settings, check_timing, design slack (WNS +0.005 ns), and clock tree (300.030 MHz). |
-| [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) | 18 MB | Complete Vivado post-route physical optimization timing signoff report containing full path delays and endpoints. |
+| [`timing_summary_postroute_physopted_300mhz.rpt`](timing_summary_postroute_physopted_300mhz.rpt) | 168 KB | Complete Vivado post-route timing signoff summary (WNS +0.005 ns, 300.030 MHz kernel clock, check_timing, intra/inter-clock tables). |
 | [`route_status.rpt`](route_status.rpt) | 714 B | Routed net status: 1,374,411 routable nets, 1,374,411 fully routed nets, 0 routing errors. |
 | [`full_utilization_routed.rpt`](full_utilization_routed.rpt) | 30 KB | Device-level utilization report showing CLBs, LUTs, FFs, BRAMs, URAMs, DSPs, and clock buffers. |
 | [`kernel_utilization_routed.rpt`](kernel_utilization_routed.rpt) | 2.4 KB | Accelerator kernel vs. platform shell resource allocation breakdown. |
 | [`slr_utilization_routed.rpt`](slr_utilization_routed.rpt) | 6.6 KB | Per-SLR logic distribution and inter-SLR Laguna SLL crossing analysis. |
-| [`full_utilization_synthed.rpt`](full_utilization_synthed.rpt) | 27 KB | Post-synthesis device utilization before physical optimization. |
-| [`kernel_utilization_synthed.rpt`](kernel_utilization_synthed.rpt) | 2.4 KB | Post-synthesis kernel resource estimation. |
 | [`power_postroute.rpt`](power_postroute.rpt) | 81 KB | Post-route vector-based thermal and electrical power dissipation (49.257 W total, 50.7 °C junction). |
 | [`drc_postroute.rpt`](drc_postroute.rpt) | 1.8 MB | Full post-route design rule check (DRC) report confirming 0 critical warnings and 0 DRC violations. |
 | [`methodology_postroute.rpt`](methodology_postroute.rpt) | 162 KB | Xilinx UltraFast design methodology compliance audit. |
