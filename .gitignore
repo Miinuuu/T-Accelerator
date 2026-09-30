@@ -1,0 +1,24 @@
+# Build & EDA Artefacts
+*.log
+*.jou
+*.pb
+*.rpx
+*.rpv
+*.wdb
+*.vcd
+*.str
+.Xil/
+.ipcache/
+
+# Binary & Checkpoints
+*.dcp
+*.xclbin
+*.bit
+*.bin
+
+# Temporary & Swap files
+*.swp
+*.bak
+*~
+*.backup.*
+__pycache__/
