@@ -1,13 +1,16 @@
 # TiAccel: Transformer Integrated Accelerator
 
-> **Heterogeneous On-Chip Architecture for High-Throughput & Low-Latency LLM Inference**  
-> AMD / Xilinx Alveo U200 FPGA (**DATA_CLK 300 MHz Fully Closed** & On-Board Silicon Verified)
+> [!NOTE]
+> **Document Purpose**: This document specifies the architectural implementation, hardware subsystem boundaries, 300.00 MHz physical signoff metrics, and on-board silicon verification results for the TiAccel heterogeneous inference platform on the AMD Alveo U200 FPGA.
+
+**Heterogeneous On-Chip Architecture for High-Throughput and Low-Latency LLM Inference**  
+AMD / Xilinx Alveo U200 FPGA (**DATA_CLK 300.00 MHz Fully Closed** and On-Board Silicon Verified)
 
 ---
 
-## 📌 Key Highlights & Performance Summary
+## 1. Key Highlights and Performance Summary
 
-| Metric | Specification & Silicon Measurement | Details |
+| Metric | Specification and Silicon Measurement | Architectural Details |
 |---|---|---|
 | **Target Platform** | **AMD / Xilinx Alveo U200** | `xcu200-fsgd2104-2-e` (Active Cooling) |
 | **Heterogeneous Co-Processing** | **Host CPU (Target) + FPGA (Drafter)** | **AMD Ryzen 9 9950X** (Target: Gemma 4 E2B Q8_0) + **Alveo U200** (Drafter: TiAccel MTP) |
@@ -23,7 +26,7 @@
 
 ---
 
-## 1. Overview
+## 2. Overview
 
 Large Language Model (LLM) serving consists of two computationally distinct phases:
 1. **Prefill Phase**: Processes the entire input prompt in parallel, characterized by **compute-intensive** operations (dominated by GEMM).
@@ -46,9 +49,10 @@ Conventional accelerators optimized for only one phase suffer from substantial m
 
 ---
 
-## 2. System Architecture & Subsystems
+## 3. System Architecture and Subsystems
 
-### 2.1 Pipelined Datapath Across Super Logic Regions (SLRs)
+### 3.1 Pipelined Datapath Across Super Logic Regions (SLRs)
+
 
 TiAccel maintains a deterministic, pipelined datapath structured across the 3 SLRs of the Alveo U200 FPGA:
 
@@ -113,7 +117,7 @@ flowchart TD
     TACC ==>|slr_credit_xing : 2-Hop Registered Credit Crossing SLR2 to SLR0| TBuf
 ```
 
-### 2.2 Hardware Subsystem Schematic
+### 3.2 Hardware Subsystem Schematic
 
 Subsystems are interconnected through credit-based flow control and registered skid buffers to eliminate routing congestion across Super Logic Region (SLR) boundaries.
 
@@ -136,11 +140,11 @@ Subsystems are interconnected through credit-based flow control and registered s
 
 ---
 
-## 3. Physical Implementation & Floorplan
+## 4. Physical Implementation and Floorplan
 
 TiAccel achieves timing closure at **300.00 MHz** on the AMD Alveo U200 (XCU200) across its 3 Super Logic Regions (SLRs) using `Congestion_SSI_SpreadLogic_high` directives and locality-aware floorplanning.
 
-### 3.1 SLR Partitioning & Floorplan
+### 4.1 SLR Partitioning and Floorplan
 
 <p align="center">
   <img src="fig/pnr_floorplan.png" width="900" alt="TiAccel Floorplan on Alveo U200">
@@ -153,7 +157,7 @@ TiAccel achieves timing closure at **300.00 MHz** on the AMD Alveo U200 (XCU200)
 - **SLR2**: Consolidates compute-intensive modules—`TPU` (1,024 DSPs), `TACC`, `TUBUF`, `TOSC`, and `TDMC`—to localize high-density routing paths.
 - **Distributed Across SLRs**: The 20 MiB UltraRAM L2 SRAM is distributed across all 3 SLRs to prevent routing congestion and balance die utilization.
 
-### 3.2 300 MHz Post-Route Device View
+### 4.2 300 MHz Post-Route Device View
 
 <p align="center">
   <img src="fig/pnr_device_full.png" width="900" alt="TiAccel Routed Device View">
@@ -163,13 +167,13 @@ TiAccel achieves timing closure at **300.00 MHz** on the AMD Alveo U200 (XCU200)
 
 ---
 
-## 4. Hardware Implementation & Silicon Metrics
+## 5. Hardware Implementation and Silicon Metrics
 
-> [!TIP]
-> **Complete Physical Signoff Evidence & Vivado Reports Available**:
-> All official AMD Vivado™ 2024.2 signoff reports (`.rpt`), including 300.00 MHz post-route timing closure (`WNS +0.009 ns`, 0 violations), 100% route completion status, full chip & kernel utilization, per-SLR Laguna SLL crossing analysis, hierarchical module breakdown (verifying 1,024 DSPs in TPU), power dissipation (50.28 W), and on-board silicon test results are documented in the [`report/`](report/README.md) directory.
+> [!NOTE]
+> **Complete Physical Signoff Evidence and Vivado Reports**:
+> All official AMD Vivado™ 2024.2 signoff reports (`.rpt`), including 300.00 MHz post-route timing closure (`WNS +0.009 ns`, 0 violations), 100% route completion status, full chip & kernel utilization, per-SLR Laguna SLL crossing analysis, hierarchical module breakdown (verifying 1,024 DSPs in TPU), power dissipation (50.28 W), and on-board silicon test results are documented in [`report/README.md`](report/README.md).
 
-### 4.1 Timing Signoff @ 300 MHz
+### 5.1 Timing Signoff at 300 MHz
 
 Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff stage across all endpoints with zero violations:
 
@@ -186,7 +190,7 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 ------------------------------------------------------------------------------------------------------
 ```
 
-### 4.2 FPGA Resource Utilization (AMD Alveo U200)
+### 5.2 FPGA Resource Utilization (AMD Alveo U200)
 
 | Resource | Used | Available | Total Utilization (%) | TiAccel Kernel Only |
 |---|---:|---:|---:|---:|
@@ -200,7 +204,7 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 | └ *RAMB18E2* | 137 | 4,320 | 3.17% | 127 |
 | **DSP Blocks (DSP48E2)** | **1,331** | 6,840 | **19.46%** | **1,321** |
 
-### 4.3 Subsystem Module Resource Breakdown
+### 5.3 Subsystem Module Resource Breakdown
 
 | Module Instance | Primary SLR | LUTs | FFs | BRAM Tile | URAM | DSP48E2 | Primary Function |
 |---|---|---:|---:|---:|---:|---:|---|
@@ -218,7 +222,7 @@ Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff st
 | **Other / Glue** | Multiple | 4,190 (1.4%) | 8,236 (2.2%) | 0.0 | 0 | 0 | CT Master, GR, SLR credit crossing buffers |
 | **TiAccel Kernel Total** | — | **306,582** | **372,621** | **635.5** | **640** | **1,321** | Top-level kernel (`tiaccel_top`) |
 
-### 4.4 On-Board Hardware Benchmarks
+### 5.4 On-Board Hardware Benchmarks
 
 Measured on AMD Alveo U200 silicon hardware running the production bitstream (`tiaccel_top.xclbin`, DATA_CLK 300 MHz) with XRT 2.19.194:
 
@@ -251,7 +255,7 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
   - `cda` (20/20 bit-exact), `lm16` (66/66 checks), `lm32`/`lm32high` (130/130 checks) 100% Bit-Exact verified against golden oracle models.
   - 64 MiB round-trip DRAM SHA256 checksum exact match (0 bit errors).
 
-### 4.5 Memory Subsystem Bandwidth & Saturation
+### 5.5 Memory Subsystem Bandwidth and Saturation
 
 | Subsystem Channel | Controller Instance | Bus Width & Clock | Peak Bandwidth | Sustained / Measured Bandwidth | Latency | Primary Function |
 |---|---|---|---:|---:|:---:|---|
@@ -265,7 +269,7 @@ Measured on AMD Alveo U200 silicon hardware running the production bitstream (`t
 
 ---
 
-## 5. Host Software & Control ABI
+## 6. Host Software and Control ABI
 
 To eliminate PCIe MMIO latency overheads (reads ~1,000 ns, writes ~47 ns), TiAccel establishes a strict Host ABI contract:
 
@@ -275,7 +279,8 @@ To eliminate PCIe MMIO latency overheads (reads ~1,000 ns, writes ~47 ns), TiAcc
 
 ---
 
-## 6. Reproducibility & Intellectual Property
+## 7. Reproducibility and Intellectual Property
 
 - **Verification Toolchain**: AMD Vivado v2024.2 / Vitis v2024.2, XRT 2.19.194 (Ubuntu 24.04 LTS).
-- **Code Availability**: To facilitate double-blind peer review and independent evaluation, core RTL modules are packaged with standard **IEEE 1735 encryption**. Users can execute Simulation, Synthesis, Implementation, and Bitstream generation directly within AMD Vivado.
+- **Code Availability**: Core RTL modules are packaged with standard **IEEE 1735 encryption** to support double-blind peer review and independent evaluation. Users can execute Simulation, Synthesis, Implementation, and Bitstream generation directly within AMD Vivado.
+

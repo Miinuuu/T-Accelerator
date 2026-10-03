@@ -1,8 +1,10 @@
-# T-Accelerator Hardware Signoff & Implementation Verification Reports
+# T-Accelerator Hardware Signoff and Verification Reports (`T-Accelerator/report`)
 
-This directory contains the authoritative implementation, place-and-route (P&R), timing closure, and resource utilization signoff reports for the **T-Accelerator (TiAccel)** core running at **300.00 MHz** on the AMD / Xilinx Alveo U200 datacenter accelerator card.
+> [!NOTE]
+> **Document Purpose**: This directory indexes the physical signoff, place-and-route (P&R), timing closure, power analysis, and on-board silicon verification reports for the TiAccel core running at 300.00 MHz on the AMD Alveo U200 FPGA.
 
 All reports were produced directly by **AMD Vivado™ Design Suite v2024.2 (lin64, Build 5239630)** during the official production link run `k19_pnr_r25_20260929`.
+
 
 ---
 

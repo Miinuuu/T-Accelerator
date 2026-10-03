@@ -1,4 +1,7 @@
-# r25 Board Silicon Verification Results (2026-09-30)
+# r25 Board Silicon Verification Results (`T-Accelerator/report`)
+
+> [!NOTE]
+> **Document Purpose**: This log records the physical on-board silicon verification measurements, regression test suite latencies, and speculative decoding throughput on the AMD Alveo U200 hardware running the r25 bitstream.
 
 Production Bitstream: `tiaccel_top.xclbin` (300.00 MHz Signoff Image)  
 - **SHA-256**: `5b517dea7eb526a45e9045c6db5f994a798476ab4a13d6f09194dd79c0d0fcb0`  
@@ -8,6 +11,7 @@ Production Bitstream: `tiaccel_top.xclbin` (300.00 MHz Signoff Image)
 - **Memory Contract**: TUBUF 1 MiB + On-Chip AXI SRAM 20 MiB (`TIACCEL_U200_SRAM_20M`)  
 
 ---
+
 
 ## 1. Regression Test Suite Results
 
