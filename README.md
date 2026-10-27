@@ -103,7 +103,7 @@ Main kernel consumers (LUT / DSP): SFUC 140,853 / 225, TPU 37,347 / 1,024, MIC-S
 | **DFlash** (z-lab, block 16 QAT) | Block draft, rows 1–15 are candidates | 45.5 tok/s; draft 18.7 ms/round; ORACLE_OK on 153 rounds |
 | **cflash** variant C | Reads Target K/V (layers 1/12/22/33) | 47.4 – 47.8 tok/s; draft 12.6 ms/round; ORACLE_OK on 166 rounds |
 
-- **DFlash draft alone (r55 board, 221 rounds, 8 prompts)**: 17.9 ms/round for 14.0 draft tokens/round, about **780 tok/s**. AL is 4.40 tokens/round, about 245 accepted tok/s.
+- **DFlash draft (r55 board, 221 rounds, 8 prompts)**: one block pass of 16 rows (anchor + 15 draft tokens) takes 24.9 ms on the device, about **600 tok/s** without predraft. Predraft starts the next block during verify and hits in 87 % of rounds, so the exposed wait falls to 17.9 ms/round (about 840 tok/s equivalent). AL is 4.40 tokens/round, about 245 accepted tok/s on the exposed wait.
 - **DFlash and cflash at r55** share one config: SFUC chain c1, G1 INT8 hold, F3 norm fold, H1 SFUC source in SRAM, L1 CDA early producer, landing overlap `all`, D4, C2 softmax reduce RF, C4 FWHT `i3`, GLU hide, session spin 200 ms and **two command streams**. DFlash also runs O1 context pre-run, prompt pre-run and D1 layer-0 table.
 - **Bottleneck**: the Host verify takes about two thirds of a round. Draft and verify run in series. The CPU idles during draft. The U200 idles during verify.
 - r55 programs run only on the r55 image. The runner checks the image fingerprint.
