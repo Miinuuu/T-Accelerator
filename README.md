@@ -1,7 +1,7 @@
-# TiAccel: Transformer Integrated Accelerator
+# T-Accelerator: Transformer Integrated Accelerator
 
 > [!NOTE]
-> Heterogeneous LLM-inference accelerator on the AMD Alveo U200. This page summarizes the architecture, the 300 MHz signoff and the on-board results. The Vivado reports are in git history (`report/`, removed). Status date: 2026-10-27 (image r55).
+> Heterogeneous LLM-inference accelerator on the AMD Alveo U200. This page summarizes the architecture, the 300 MHz signoff and the on-board results. Status date: 2026-10-27 (image r55).
 
 **Platform**: AMD Alveo U200 (`xcu200-fsgd2104-2-e`), `DATA_CLK` 300.00 MHz, Vivado/Vitis 2024.2, XRT 2.19.194.
 
@@ -12,15 +12,12 @@
 | Metric | Value | Basis |
 |---|---|---|
 | Timing, current image **r55** | WNS **+0.017 ns**, WHS +0.004 ns, 0 failing endpoints | Post-route, 2026-10-27 |
-| Timing, report set **r25** | WNS +0.009 ns, WHS +0.006 ns, 1,371,961 nets routed | Vivado report, r25 build (git history) |
-| Compute | **1,024 DSP48E2** TPU (PM16 × TC128) | RTL, r25 hierarchy report (git history) |
+| Compute | **1,024 DSP48E2** TPU (PM16 × TC128) | RTL |
 | On-chip memory | 20 MiB URAM AXI SRAM + 1 MiB BRAM TUBUF | Fixed in all images |
 | SRAM bandwidth | 19.2 GB/s simplex, 38.4 GB/s duplex (512-bit @ 300 MHz) | Generated-IP simulation |
 | DDR bandwidth | 19.2 GB/s bus peak, **16.8 GB/s** measured (single DDR4 bank) | `xrt-smi validate -r mem-bw` |
-| Raw decode latency (r25) | 12.52 – 12.67 ms/token (~80 tok/s) | Board, W65 chain, 528/528 tensors bit-exact |
-| Gemma E2B speculative decode (r26) | **61.0 – 61.5 tok/s** short, 39.0 – 39.1 tok/s long; Target-only 22.9 / 22.2 | Board, 32 prompts × 96 tokens; output equals Target greedy |
-| Qwen3-4B DFlash (r55, short8) | **45.5 tok/s** (draft 24.7 → 18.7 ms/round, +5.4 % over r54; 37.1 tok/s at r44) | Board gate `GATE_PASS`, tokens equal Target greedy |
-| Qwen3-4B cflash (r55, short8) | **47.4 – 47.8 tok/s** (draft 17.9 → 12.6 ms/round, +4.5 – +5.2 %) | Same gate |
+| Qwen3-4B DFlash (r55, short8) | **45.5 tok/s** (draft 18.7 ms/round, +5.4 % over r54) | Board gate `GATE_PASS`, tokens equal Target greedy |
+| Qwen3-4B cflash (r55, short8) | **47.4 – 47.8 tok/s** (draft 12.6 ms/round, +4.5 – +5.2 % over r54) | Same gate |
 | Power | 50.28 W, 51.2 °C junction | Vivado **estimate**, not a board sensor reading |
 
 Host: AMD Ryzen 9 9950X runs the Target model (`llama.cpp`, Q8_0). The U200 runs the drafter.
@@ -29,15 +26,20 @@ Host: AMD Ryzen 9 9950X runs the Target model (`llama.cpp`, Q8_0). The U200 runs
 
 ## 2. Architecture
 
-LLM decode is memory-bound. TiAccel keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
+LLM decode is memory-bound. T-Accelerator keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
 
 ```
 Host MMIO → TDMC → TUBUF → TOSC → TPU → TACC → SFUC → MIC-SP → SRAM | DDR
 ```
 
 <p align="center">
-  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="TiAccel subsystem schematic">
-  <br><em>Figure 1. Top-level subsystem schematic</em>
+  <img src="fig/top.png" width="900" alt="T-Accelerator top-level block diagram">
+  <br><em>Figure 1. Top-level block diagram across the three SLRs (<a href="fig/top.pdf">PDF</a>)</em>
+</p>
+
+<p align="center">
+  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="T-Accelerator subsystem schematic">
+  <br><em>Figure 2. Top-level subsystem schematic</em>
 </p>
 
 | Block | SLR | Role |
@@ -62,7 +64,7 @@ Timing closes at 300 MHz with `Congestion_SSI_SpreadLogic_high` and locality-awa
 
 <p align="center">
   <img src="fig/pnr_floorplan.png" width="800" alt="Floorplan on Alveo U200">
-  <br><em>Figure 2. Pblock partitioning (r25 build)</em>
+  <br><em>Figure 3. Pblock partitioning</em>
 </p>
 
 ### Timing (r55, post-route physopt)
@@ -73,7 +75,7 @@ Timing closes at 300 MHz with `Congestion_SSI_SpreadLogic_high` and locality-awa
 
 The r55 build has total SLL use of 15,065 (SLR2↔SLR1 52.8 %, SLR1↔SLR0 34.4 %).
 
-### Utilization (r25 report set)
+### Utilization (latest report in hand: r25)
 
 | Resource | Full chip | Kernel only |
 |---|---:|---:|
@@ -91,26 +93,21 @@ Main kernel consumers (LUT / DSP): SFUC 140,853 / 225, TPU 37,347 / 1,024, MIC-S
 
 <p align="center">
   <img src="fig/demo.gif" width="800" alt="Interactive chat demo on the U200">
-  <br><em>Figure 3. Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only. It is not a performance claim.</em>
+  <br><em>Figure 4. Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only. It is not a performance claim.</em>
 </p>
 
-- **Gemma E2B (r26, K8 learned stop)**: Short prompts 61.0 – 61.5 tok/s (2.6× over Target-only), AL 3.28. Long prompts 39.0 – 39.1 tok/s (1.7×). Output equals Target greedy on 32/32 and 4/4 prompts.
-- **Drafters on the U200** (the Host CPU verifies):
+- **Drafters on the U200** (the Host CPU verifies, Qwen3-4B Target):
 
-| Drafter | Target | Run shape | Latest board result |
-|---|---|---|---|
-| Gemma 4 E2B/E4B assistant | Gemma 4 (Q8_0, CPU) | AR drafter, K8 learned stop | r26: 61.0 – 61.5 tok/s short, 39.0 – 39.1 long |
-| **Qwen3 DFlash** (z-lab, block 16 QAT) | Qwen3-4B | Block draft, rows 1–15 are candidates | r55: 45.5 tok/s short8; ORACLE_OK on 153 rounds (two streams) |
-| Qwen3 cflash variant C | Qwen3-4B | Reads Target K/V (layers 1/12/22/33) | r55: 47.4 – 47.8 tok/s short8; ORACLE_OK on 166 rounds |
-| Qwen3 EAGLE-3 | Qwen3-4B | Chain drafter, early stop 16 | One stream; not in the r55 gate |
+| Drafter | Run shape | r55 board result (short8) |
+|---|---|---|
+| **DFlash** (z-lab, block 16 QAT) | Block draft, rows 1–15 are candidates | 45.5 tok/s; draft 18.7 ms/round; ORACLE_OK on 153 rounds |
+| **cflash** variant C | Reads Target K/V (layers 1/12/22/33) | 47.4 – 47.8 tok/s; draft 12.6 ms/round; ORACLE_OK on 166 rounds |
 
 - **DFlash and cflash at r55** share one config: SFUC chain c1, G1 INT8 hold, F3 norm fold, H1 SFUC source in SRAM, L1 CDA early producer, landing overlap `all`, D4, C2 softmax reduce RF, C4 FWHT `i3`, GLU hide, session spin 200 ms and **two command streams**. DFlash also runs O1 context pre-run, prompt pre-run and D1 layer-0 table.
-- **Bottleneck**: the Host verify takes about two thirds of a round (r44 DFlash short8: 87.8 of 135.4 ms). Draft and verify run in series. The CPU idles during draft. The U200 idles during verify.
+- **Bottleneck**: the Host verify takes about two thirds of a round. Draft and verify run in series. The CPU idles during draft. The U200 idles during verify.
 - r55 programs run only on the r55 image. The runner checks the image fingerprint.
-- **Numerics**: `cda` 20/20, `lm16` 66/66, `lm32`/`lm32high` 130/130 bit-exact against oracle models. A 64 MiB DRAM round trip matches by SHA-256.
+- **Numerics (r25)**: `cda` 20/20, `lm16` 66/66, `lm32`/`lm32high` 130/130 bit-exact against oracle models. A 64 MiB DRAM round trip matches by SHA-256.
 - hw_emu is functionally exact. It is not cycle-faithful for DDR traffic.
-
-The r25 test log (xclbin SHA-256 `5b517dea7eb526a45e9045c6db5f994a798476ab4a13d6f09194dd79c0d0fcb0`) is in git history.
 
 ---
 
