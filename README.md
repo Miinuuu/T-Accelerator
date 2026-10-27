@@ -1,286 +1,131 @@
 # TiAccel: Transformer Integrated Accelerator
 
 > [!NOTE]
-> **Document Purpose**: This document specifies the architectural implementation, hardware subsystem boundaries, 300.00 MHz physical signoff metrics, and on-board silicon verification results for the TiAccel heterogeneous inference platform on the AMD Alveo U200 FPGA.
+> Heterogeneous LLM-inference accelerator on the AMD Alveo U200. This page summarizes the architecture, the 300 MHz signoff and the on-board results. The Vivado reports are in git history (`report/`, removed). Status date: 2026-10-27 (image r55).
 
-**Heterogeneous On-Chip Architecture for High-Throughput and Low-Latency LLM Inference**  
-AMD / Xilinx Alveo U200 FPGA (**DATA_CLK 300.00 MHz Fully Closed** and On-Board Silicon Verified)
+**Platform**: AMD Alveo U200 (`xcu200-fsgd2104-2-e`), `DATA_CLK` 300.00 MHz, Vivado/Vitis 2024.2, XRT 2.19.194.
 
 ---
 
-## 1. Key Highlights and Performance Summary
+## 1. Summary
 
-| Metric | Specification and Silicon Measurement | Architectural Details |
+| Metric | Value | Basis |
 |---|---|---|
-| **Target Platform** | **AMD / Xilinx Alveo U200** | `xcu200-fsgd2104-2-e` (Active Cooling) |
-| **Heterogeneous Co-Processing** | **Host CPU (Target) + FPGA (Drafter)** | **AMD Ryzen 9 9950X** (Target: Gemma 4 E2B Q8_0) + **Alveo U200** (Drafter: TiAccel MTP) |
-| **Speculative Inference Throughput** | **Up to 56.2 tok/s** (**2.45× speedup**) | CPU 9950X Target-Only 22.9 tok/s $\to$ Co-Processing 56.2 tok/s (Acceptance Length $\alpha = 3.142$, K8 learned stop) |
-| **Core Frequency** | **300.00 MHz** (`DATA_CLK`) | Vivado 2024.2 Physical Signoff (**WNS: +0.009 ns, TNS: 0.000 ns, 0 Violations**) |
-| **On-Board Token Latency** | **12.52 – 12.67 ms / token** | Measured on U200 hardware (W65 4-step chain, 528 tensors Bit-Exact PASS) |
-| **Raw Decode Throughput** | **~80 tokens/s (78.9 – 79.9 tok/s)** | Single-stream decode throughput on silicon |
-| **On-Chip L2 SRAM Bandwidth** | **19.2 GB/s (Simplex) / 38.4 GB/s (Duplex)** | 512-bit @ 300 MHz, 1.000 beat/cycle saturation, Read 10-cycle ultra-low latency |
-| **Off-Chip DRAM Bandwidth** | **19.2 GB/s (Bus Peak) / 16.8 GB/s (Platform Limit)** | Dedicated m01_axi 512-bit @ 300 MHz (U200 single DDR4 bank limit: 16.8 GB/s) |
-| **Compute Core (TPU)** | **1,024 DSP48E2** | PM16 × TC128 Parallel Tree Engine (Stationary LUTRAM Weights, 16× CSA Tree Reducers) |
-| **On-Chip L2 Memory** | **20 MiB UltraRAM (640 URAM)** | Distributed AXI SRAM for zero-latency local KV Cache & activation staging |
-| **Power Consumption** | **50.28 W** (Dynamic 46.49 W, Static 3.79 W) | Junction Temperature: 51.2 °C (Ample cooling headroom) |
+| Timing, current image **r55** | WNS **+0.017 ns**, WHS +0.004 ns, 0 failing endpoints | Post-route, 2026-10-27 |
+| Timing, report set **r25** | WNS +0.009 ns, WHS +0.006 ns, 1,371,961 nets routed | Vivado report, r25 build (git history) |
+| Compute | **1,024 DSP48E2** TPU (PM16 × TC128) | RTL, r25 hierarchy report (git history) |
+| On-chip memory | 20 MiB URAM AXI SRAM + 1 MiB BRAM TUBUF | Fixed in all images |
+| SRAM bandwidth | 19.2 GB/s simplex, 38.4 GB/s duplex (512-bit @ 300 MHz) | Generated-IP simulation |
+| DDR bandwidth | 19.2 GB/s bus peak, **16.8 GB/s** measured (single DDR4 bank) | `xrt-smi validate -r mem-bw` |
+| Raw decode latency (r25) | 12.52 – 12.67 ms/token (~80 tok/s) | Board, W65 chain, 528/528 tensors bit-exact |
+| Gemma E2B speculative decode (r26) | **61.0 – 61.5 tok/s** short, 39.0 – 39.1 tok/s long; Target-only 22.9 / 22.2 | Board, 32 prompts × 96 tokens; output equals Target greedy |
+| Qwen3-4B DFlash (r55, short8) | **45.5 tok/s** (draft 24.7 → 18.7 ms/round, +5.4 % over r54; 37.1 tok/s at r44) | Board gate `GATE_PASS`, tokens equal Target greedy |
+| Qwen3-4B cflash (r55, short8) | **47.4 – 47.8 tok/s** (draft 17.9 → 12.6 ms/round, +4.5 – +5.2 %) | Same gate |
+| Power | 50.28 W, 51.2 °C junction | Vivado **estimate**, not a board sensor reading |
+
+Host: AMD Ryzen 9 9950X runs the Target model (`llama.cpp`, Q8_0). The U200 runs the drafter.
 
 ---
 
-## 2. Overview
+## 2. Architecture
 
-Large Language Model (LLM) serving consists of two computationally distinct phases:
-1. **Prefill Phase**: Processes the entire input prompt in parallel, characterized by **compute-intensive** operations (dominated by GEMM).
-2. **Decode Phase**: Generates subsequent tokens autoregressively one by one, characterized by **memory-bound** operations (dominated by GEMV and recurrent KV Cache lookups).
+LLM decode is memory-bound. TiAccel keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
 
-Conventional accelerators optimized for only one phase suffer from substantial memory bottlenecks and severe compute idle time during the decode stage due to continuous off-chip DRAM round-trips for KV Cache access.
-
-**TiAccel (Transformer Integrated Accelerator)** is a heterogeneous neural processing architecture integrated on a single chip to address both bottlenecks simultaneously:
-
-- **High-Density K19 Parallel Tree TPU (1,024 DSPs)**: PM16 × TC128 matrix multiplication engine with zero-cycle stationary LUTRAM weight banks and high-speed CSA reduction trees, accelerating large-scale GEMM/GEMV workloads with maximum compute density.
-- **20 MiB Tightly-Coupled On-Chip AXI SRAM (640 UltraRAMs)**: Stages KV Cache and intermediate activations directly on-chip, eliminating high-latency off-chip DRAM round-trips.
-- **Shared Unified Datapath**: Both dense matrix multiplications and attention mechanisms share an unbypassed, deterministic streaming datapath. A dedicated Special Function Unit Core (SFUC) accelerates non-linear activations (SiLU/GELU), RMSNorm normalization, and streaming ArgMax/TopK token sampling in a single pass.
-- **Heterogeneous Speculative Decoding Co-Processor (CPU 9950X Target + FPGA U200 Drafter)**: Collaboratively pairs the **AMD Ryzen 9 9950X** 16-core Host CPU (running Target model verification for **Gemma 4 E2B** via `llama.cpp` Q8_0) with the **AMD Alveo U200** FPGA accelerator (running the low-latency **Gemma 4 MTP Drafter** on TiAccel hardware). Achieves interactive serving at up to **56.2 tok/s** (**2.45× speedup** over CPU target alone) while guaranteeing 100% bit-exact output equivalence with target greedy generation.
-
-<p align="center">
-  <img src="fig/u200.jpeg" width="380" alt="AMD Alveo U200 FPGA Platform">
-  <br>
-  <em>Figure 1. TiAccel Hardware Prototype Platform: AMD Alveo U200 Data Center Accelerator Card</em>
-</p>
-
----
-
-## 3. System Architecture and Subsystems
-
-### 3.1 Pipelined Datapath Across Super Logic Regions (SLRs)
-
-
-TiAccel maintains a deterministic, pipelined datapath structured across the 3 SLRs of the Alveo U200 FPGA:
-
-```mermaid
-flowchart TD
-    subgraph SLR0 ["SLR0 : Host Shell, Non-Linear SFUC & Token Sampling"]
-        direction TB
-        Host["Host CPU (PCIe Gen3x16 XDMA)"] --> Shell["Platform Shell & MMIO Control<br>(Two-Descriptor D0/D1, Write Elision)"]
-        Shell --> CTMaster["CT Master / GR Terminal Status"]
-        
-        subgraph SFUC_BOX ["SFUC : Special Function Unit Core (225 DSP48E2)"]
-            TBuf["2-Bank Tile Buffer (256-Beat T0/T1)"] --> XDA["XDA-LUT Engine (SiLU, GELU, Softmax)"]
-            XDA --> RMS["RMSNorm Engine (FP32 Sum-of-Squares & rsqrt)"]
-            RMS --> TopK["Streaming Ranker (sfuc_stream_rank)<br>32x44b Min-Heap Top-K (1..32) & ArgMax"]
-            TopK --> WDMA["WDMA Stream Engine"]
-        end
-    end
-
-    subgraph SLR1 ["SLR1 : Memory Interface Controller Hub & Interconnect"]
-        direction TB
-        MIC_SRAM["MIC-SP SRAM Controller (u_mic_sp)<br>512-bit @ 300 MHz (19.2 GB/s Simplex / 38.4 GB/s Duplex)<br>Credit-based 8R / 2W Arbiter, 10-Cycle Latency"]
-        MIC_DRAM["MIC-SP DRAM Controller (u_mic_sp_dram)<br>Dedicated m01_axi (512-bit @ 300 MHz, Outstanding 256)<br>Physical Peak: 19.2 GB/s | Platform Limit: 16.8 GB/s"]
-        
-        URAM["On-Chip L2 AXI SRAM<br>(20 MiB UltraRAM, 640 Blocks)"]
-        DDR["Off-Chip DDR4 SDRAM<br>(DDR Bank 0, m01_axi)"]
-        
-        MIC_SRAM <--> URAM
-        MIC_DRAM <--> DDR
-    end
-
-    subgraph SLR2 ["SLR2 : High-Density Dense Matrix & Vector Compute"]
-        direction TB
-        TDMC["TDMC / ILDMC Movement Controllers<br>(32B Atom Start Align, 4 KiB Split)"]
-        TUBUF["TUBUF : Tensor Unified Buffer<br>(1 MiB BRAM, 16 Banks, Read T5 / Write T2)"]
-        TOSC["TOSC : Operand Sequencer & Controller<br>(DF / WF Packing & Credit-Based Dispatch)"]
-        
-        subgraph TPU_BOX ["TPU : PM16 x TC128 Parallel Tree Matrix Engine (1,024 DSP48E2)"]
-            LUTRAM["Stationary Weight Bank<br>(8.5 KiB Zero-Cycle LUTRAM, SINT4 to INT8 Decode)"]
-            DSP_ARRAY["1,024 DSP48E2 Multiplier Array<br>(512 Leaves x 2 DSPs, Dual-Lane Pre-Adder Packing)"]
-            CSA_TREE["16x Parallel CSA Reduction Trees<br>(64-Pair 23-bit Dot Product Compression + C3 CPA)"]
-            LUTRAM --> DSP_ARRAY
-            DSP_ARRAY --> CSA_TREE
-        end
-        
-        TACC["TACC : Tensor Accumulator (64 DSP48E2)<br>16-Lane 32-bit Signed Saturation Accumulator<br>GPTQ Scale x Scale, Single-Cycle FP32 RNE"]
-        RSPU["RSPU : Rearrange & Transpose Unit<br>(FP16 D64xBK64 Attention V Transpose)"]
-        
-        TDMC --> TUBUF
-        TUBUF --> TOSC
-        TOSC --> TPU_BOX
-        TPU_BOX --> TACC
-        RSPU --> TUBUF
-    end
-
-    %% Memory & Dataflow Interconnects
-    URAM -.->|Activation / KV Fetch| TDMC
-    DDR -.->|Weight Streaming| TDMC
-    WDMA -.->|Result Writeback| MIC_SRAM
-    WDMA -.->|DRAM Spill| MIC_DRAM
-
-    %% Inter-SLR Crossing
-    TACC ==>|slr_credit_xing : 2-Hop Registered Credit Crossing SLR2 to SLR0| TBuf
+```
+Host MMIO → TDMC → TUBUF → TOSC → TPU → TACC → SFUC → MIC-SP → SRAM | DDR
 ```
 
-### 3.2 Hardware Subsystem Schematic
-
-Subsystems are interconnected through credit-based flow control and registered skid buffers to eliminate routing congestion across Super Logic Region (SLR) boundaries.
-
 <p align="center">
-  <img src="fig/tiaccel_blocks_schematic.png" width="950" alt="TiAccel Subsystem Blocks Schematic">
-  <br>
-  <em>Figure 2. TiAccel Top-Level Architecture & Subsystem Interconnect Schematic</em>
+  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="TiAccel subsystem schematic">
+  <br><em>Figure 1. Top-level subsystem schematic</em>
 </p>
 
-- **TPU (Tensor Processing Unit Core)**: Parallel tree matrix multiplication engine configured with PM16 $\times$ TC128 geometry, integrating 1,024 DSP48E2 slices. Features an 8.5 KiB zero-cycle distributed LUTRAM stationary weight bank (supporting on-the-fly SINT4-to-INT8 expansion) and 16 parallel Carry-Save Adder (CSA) reduction trees to compute 128-element dot products per lane with deterministic 8-cycle latency.
-- **TUBUF (Tensor Unified Buffer)**: 1 MiB on-chip memory organized into 16 independent physical banks (1,024 rows $\times$ 64 B) to guarantee conflict-free parallel tensor feeding (Read latency: T5, Write latency: T2).
-- **TOSC (Tensor Operand Sequencer & Controller)**: Sequences TUBUF entries, packages activation (DF) and weight (WF) vectors, and manages credit-based dispatch to the TPU.
-- **TACC (Tensor Accumulator)**: 16-lane parallel 32-bit signed saturation accumulator (`accm_int_sum_array`, PM16 $\times$ 32-bit, 64 DSPs). Accumulates partial sums over sequential K-tiles, applies GPTQ dequantization scaling (activation scale $\times$ weight scale), and performs single-cycle FP32 Round-to-Nearest-Even (RNE).
-- **SFUC (Special Function Unit Core)**: Implements 2-bank 256-beat tile storage, hardware XDA (Exponent-Direct Addressing) LUT for high-precision SiLU/GELU/Softmax functions with linear interpolation, RMSNorm normalization, and pipelined streaming TopK/ArgMax sampling with a 32$\times$44-bit Min-heap (225 DSPs).
-- **RSPU (Rearrange & Transpose Unit)**: Dedicated hardware for fixed-dimension matrix transposition (FP16 $V$-matrix transpose) in FlashAttention/PagedAttention workloads.
-- **On-Chip L2 AXI SRAM**: 640 UltraRAM blocks aggregated into a 20 MiB distributed AXI4 memory subsystem for zero-bubble KV Cache serving.
-- **MIC-SP (Memory Interface Controller / Scratchpad)**:
-  - **On-Chip SRAM Controller (`u_mic_sp`, `RAM_TYPE=0`)**: 512-bit bus @ 300 MHz achieving **1.000 beat/cycle sustained bus saturation (19.2 GB/s)** with a 10-cycle fixed read latency. Supports credit-based pre-reservation for 8 read and 2 write clients without Head-of-Line (HOL) blocking.
-  - **Off-Chip DRAM Controller (`u_mic_sp_dram`, `RAM_TYPE=1`)**: Dedicated to DDR Bank 0 via `m01_axi` (512-bit AXI4 @ 300 MHz, Outstanding 256), delivering a physical AXI bus peak of **19.2 GB/s** and saturating up to the platform DDR4 single-bank ceiling of **16.8 GB/s** for streaming large model weights.
+| Block | SLR | Role |
+|---|---|---|
+| **TDMC / ILDMC** | 2 | Host-driven data movement into TUBUF. ILDMC copies memory to memory. |
+| **TUBUF** | 2 | 1 MiB BRAM, 16 banks. Read T5, write T2. |
+| **TOSC** | 2 | Sequences activation (DF) and weight (WF) vectors with credit-based dispatch. |
+| **TPU** | 2 | PM16 × TC128 parallel tree. 1,024 DSP48E2, LUTRAM stationary weights (SINT4 → INT8), 16 CSA trees. |
+| **TACC** | 2 | 16-lane INT32 saturating accumulator. GPTQ scales and FP32 FMA with RNE. 64-slot FSUM store (r55). |
+| **RSPU** | 2 | FP16 transpose for attention V. |
+| **SFUC** | 0 | XDA-LUT SiLU/GELU/Softmax, RMSNorm, stream ArgMax/TopK (32 × 44-bit min-heap). 225 DSP48E2. |
+| **MIC-SP** | 1 | Two controllers: SRAM (`u_mic_sp`, 10-cycle read, 8R/2W credit arbiter) and DDR (`u_mic_sp_dram`, `m01_axi`, DDR[1], 256 outstanding). |
+| **Command sequencer** | 0 | Dual-stream sequencer in `ct_master` with host-memory fetch. Replaces per-launch MMIO. |
+
+Blocks cross SLR boundaries through registered credit crossings.
 
 ---
 
-## 4. Physical Implementation and Floorplan
+## 3. Physical Implementation
 
-TiAccel achieves timing closure at **300.00 MHz** on the AMD Alveo U200 (XCU200) across its 3 Super Logic Regions (SLRs) using `Congestion_SSI_SpreadLogic_high` directives and locality-aware floorplanning.
-
-### 4.1 SLR Partitioning and Floorplan
+Timing closes at 300 MHz with `Congestion_SSI_SpreadLogic_high` and locality-aware pblocks: SFUC and the shell in SLR0, MIC-SP in SLR1, the compute core in SLR2. The 20 MiB URAM spans all three SLRs.
 
 <p align="center">
-  <img src="fig/pnr_floorplan.png" width="900" alt="TiAccel Floorplan on Alveo U200">
-  <br>
-  <em>Figure 3. Locality-Aware Pblock Partitioning across 3 SLRs on AMD Alveo U200</em>
+  <img src="fig/pnr_floorplan.png" width="800" alt="Floorplan on Alveo U200">
+  <br><em>Figure 2. Pblock partitioning (r25 build)</em>
 </p>
 
-- **SLR0**: Hosts the non-linear execution core `SFUC` and the PCIe/Platform Shell (BLP).
-- **SLR1**: Centers the `MIC-SP` arbitration engines, managing the DDR0 DRAM channel and SRAM crossbars.
-- **SLR2**: Consolidates compute-intensive modules—`TPU` (1,024 DSPs), `TACC`, `TUBUF`, `TOSC`, and `TDMC`—to localize high-density routing paths.
-- **Distributed Across SLRs**: The 20 MiB UltraRAM L2 SRAM is distributed across all 3 SLRs to prevent routing congestion and balance die utilization.
+### Timing (r55, post-route physopt)
 
-### 4.2 300 MHz Post-Route Device View
+| WNS | TNS | WHS | THS | Failing endpoints |
+|---:|---:|---:|---:|---:|
+| +0.017 ns | 0.000 ns | +0.004 ns | 0.000 ns | 0 of 2,093,782 |
 
-<p align="center">
-  <img src="fig/pnr_device_full.png" width="900" alt="TiAccel Routed Device View">
-  <br>
-  <em>Figure 4. Fully Placed and Routed Device View @ 300 MHz (Build Release: k19_pnr_r25_20260929)</em>
-</p>
+The r55 build has total SLL use of 15,065 (SLR2↔SLR1 52.8 %, SLR1↔SLR0 34.4 %).
+
+### Utilization (r25 report set)
+
+| Resource | Full chip | Kernel only |
+|---|---:|---:|
+| CLB LUTs | 498,988 (42.21 %) | 306,582 |
+| CLB FFs | 642,008 (27.15 %) | 372,621 |
+| URAM | 660 (68.75 %) | 640 |
+| BRAM tiles | 903.5 (41.83 %) | 635.5 |
+| DSP48E2 | 1,331 (19.46 %) | 1,321 |
+
+Main kernel consumers (LUT / DSP): SFUC 140,853 / 225, TPU 37,347 / 1,024, MIC-SP DRAM 29,513 / 0, MIC-SP SRAM 27,024 / 0, TACC 23,707 / 64. The r55 full-chip utilization report is not in this repository.
 
 ---
 
-## 5. Hardware Implementation and Silicon Metrics
-
-> [!NOTE]
-> **Complete Physical Signoff Evidence and Vivado Reports**:
-> All official AMD Vivado™ 2024.2 signoff reports (`.rpt`), including 300.00 MHz post-route timing closure (`WNS +0.009 ns`, 0 violations), 100% route completion status, full chip & kernel utilization, per-SLR Laguna SLL crossing analysis, hierarchical module breakdown (verifying 1,024 DSPs in TPU), power dissipation (50.28 W), and on-board silicon test results are documented in [`report/README.md`](report/README.md).
-
-### 5.1 Timing Signoff at 300 MHz
-
-Full timing closure verified at the Vivado 2024.2 `Physopt postRoute` signoff stage across all endpoints with zero violations:
-
-```text
-------------------------------------------------------------------------------------------------------
-| Design Timing Summary (DATA_CLK = 300.00 MHz, Target Period = 3.333 ns)
-------------------------------------------------------------------------------------------------------
-  WNS (Worst Negative Slack)      : +0.009 ns  (MET)
-  TNS (Total Negative Slack)      :  0.000 ns  (0 Failing Endpoints)
-  WHS (Worst Hold Slack)          : +0.006 ns  (MET)
-  THS (Total Hold Slack)          :  0.000 ns  (0 Failing Endpoints)
-  WPWS (Worst Pulse Width Slack)  :  0.000 ns  (MET)
-  Routing Status                  : 100% Fully Routed (1,371,961 nets, 0 Routing Errors)
-------------------------------------------------------------------------------------------------------
-```
-
-### 5.2 FPGA Resource Utilization (AMD Alveo U200)
-
-| Resource | Used | Available | Total Utilization (%) | TiAccel Kernel Only |
-|---|---:|---:|---:|---:|
-| **CLB LUTs** | **498,988** | 1,182,240 | **42.21%** | 306,582 |
-| └ *LUT as Logic* | 456,237 | 1,182,240 | 38.59% | 284,119 |
-| └ *LUT as Memory (Distributed)* | 42,751 | 591,840 | 7.22% | 22,463 |
-| **CLB Registers (FF)** | **642,008** | 2,364,480 | **27.15%** | 372,621 |
-| **UltraRAM (URAM)** | **660** | 960 | **68.75%** | **640** (20 MiB SRAM) |
-| **Block RAM Tile (BRAM)** | **903.5** | 2,160 | **41.83%** | 635.5 (TUBUF, etc.) |
-| └ *RAMB36E2* | 835 | 2,160 | 38.66% | 572 |
-| └ *RAMB18E2* | 137 | 4,320 | 3.17% | 127 |
-| **DSP Blocks (DSP48E2)** | **1,331** | 6,840 | **19.46%** | **1,321** |
-
-### 5.3 Subsystem Module Resource Breakdown
-
-| Module Instance | Primary SLR | LUTs | FFs | BRAM Tile | URAM | DSP48E2 | Primary Function |
-|---|---|---:|---:|---:|---:|---:|---|
-| **SFUC** | SLR0 | 140,853 (45.9%) | 125,071 (33.6%) | 71.0 (11.2%) | 0 | 225 (17.0%) | Non-linear activation, RMSNorm, Stream TopK/ArgMax |
-| **TPU** | SLR2 | 37,347 (12.2%) | 41,818 (11.2%) | 0.0 | 0 | 1,024 (77.5%) | PM16 × TC128 parallel tree matrix engine (stationary LUTRAM, CSA tree) |
-| **MIC-SP (DRAM)** | SLR1 | 29,513 (9.6%) | 52,593 (14.1%) | 124.0 (19.5%) | 0 | 0 | Off-chip DDR0 DRAM DMA control & arbitration |
-| **MIC-SP (SRAM)** | SLR1 | 27,024 (8.8%) | 51,100 (13.7%) | 124.0 (19.5%) | 0 | 0 | On-chip L2 AXI SRAM arbitration & buffers |
-| **TACC** | SLR2 | 23,707 (7.7%) | 22,857 (6.1%) | 38.0 (6.0%) | 0 | 64 (4.8%) | 32-bit signed saturation accumulation, GPTQ scale, FP32 RNE |
-| **RSPU** | SLR2 | 11,572 (3.8%) | 13,729 (3.7%) | 8.0 (1.3%) | 0 | 0 | Attention matrix transposition & rearrangement |
-| **TUBUF** | SLR2 | 10,096 (3.3%) | 18,081 (4.9%) | 232.0 (36.5%) | 0 | 0 | 1 MiB 16-bank unified tensor buffer |
-| **TOSC** | SLR2 | 9,916 (3.2%) | 12,441 (3.3%) | 0.0 | 0 | 5 (0.4%) | Tensor scaling, sequencer & entry issuing |
-| **TDMC** | SLR2 | 5,824 (1.9%) | 9,612 (2.6%) | 15.0 (2.4%) | 0 | 3 (0.2%) | Tensor data movement controller |
-| **ILDMC** | SLR2 | 3,596 (1.2%) | 6,366 (1.7%) | 7.5 (1.2%) | 0 | 0 | Instruction / descriptor DMA controller |
-| **AXI SRAM** | SLR0/1/2 | 2,944 (1.0%) | 10,717 (2.9%) | 16.0 (2.5%) | 640 (100%) | 0 | 20 MiB UltraRAM on-chip memory subsystem |
-| **Other / Glue** | Multiple | 4,190 (1.4%) | 8,236 (2.2%) | 0.0 | 0 | 0 | CT Master, GR, SLR credit crossing buffers |
-| **TiAccel Kernel Total** | — | **306,582** | **372,621** | **635.5** | **640** | **1,321** | Top-level kernel (`tiaccel_top`) |
-
-### 5.4 On-Board Hardware Benchmarks
-
-Measured on AMD Alveo U200 silicon hardware running the production bitstream (`tiaccel_top.xclbin`, DATA_CLK 300 MHz) with XRT 2.19.194:
+## 4. On-Board Results
 
 <p align="center">
-  <img src="fig/demo.gif" width="900" alt="Live End-to-End LLM Interactive Serving Demonstration on AMD Alveo U200 Silicon">
-  <br>
-  <em>Figure 5. Real-Time End-to-End LLM Interactive Serving Live Demonstration on AMD Alveo U200 Silicon Hardware (Speculative Decoding with AMD Ryzen 9 9950X, ~29 tok/s)</em>
+  <img src="fig/demo.gif" width="800" alt="Interactive chat demo on the U200">
+  <br><em>Figure 3. Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only. It is not a performance claim.</em>
 </p>
 
-- **Gemma 4 E2B Speculative Decoding Co-Processing (Host CPU 9950X Target + Alveo U200 FPGA Drafter)**:
-  - **Collaborative Architecture**:
-    - **Target Model (Verification)**: **Gemma 4 E2B** (Q8_0) executed on **Host CPU: AMD Ryzen 9 9950X** (16-Core / 32-Thread Zen 5, `llama.cpp` CPU-native engine with batch-invariant verify, 12 OpenMP threads).
-    - **Draft Model (Generation)**: **Gemma 4 Assistant (MTP) Drafter** executed on **FPGA: AMD Alveo U200** (TiAccel 300 MHz full pipeline with SINT4 QAT r4 weights, CDA compressed sint8 KV-cache, fused projection launches, and resident KV delta reuse).
-  - **End-to-End Silicon Serving Benchmarks (32 Prompts × 96 Tokens Evaluation)**:
-    - **Host CPU 9950X Target-Only Baseline**: **22.9 tok/s** (Verify latency: 43.7 ms).
-    - **CPU 9950X Target + U200 Drafter (r25 baseline, K8 learned stop, q12c)**: **56.2 tok/s** (**2.45× speedup**, Acceptance Length $\alpha = 3.142$, Verify latency: 48.9 ms, exposed Draft latency: 8.1 ms).
-    - **Mathematical Output Equivalence**: 100% bit-exact match with target-only greedy decoding across all 32 benchmark prompts.
-  - **Live Terminal Interactive Chat Demonstration (`Figure 5: demo.gif`)**:
-    - Launch command: `./run_gemma.sh chat` (Target: Gemma 4 E2B on CPU 9950X, Drafter: TiAccel on U200).
-    - Telemetry: **171 tokens generated, Acceptance Length (AL) = 2.04, 28.5 tok/s sustained interactive throughput, prefill latency: 96 ms**.
+- **Gemma E2B (r26, K8 learned stop)**: Short prompts 61.0 – 61.5 tok/s (2.6× over Target-only), AL 3.28. Long prompts 39.0 – 39.1 tok/s (1.7×). Output equals Target greedy on 32/32 and 4/4 prompts.
+- **Drafters on the U200** (the Host CPU verifies):
 
-- **Decode Token Latency (W65 4-Step Chain Silicon Measurement)**:
-  - **Idle Host Machine**: **12.52 – 12.67 ms / token** (`replay_ms = 50.08 – 50.68 ms`, 528/528 tensors Bit-Exact PASS).
-  - **Raw Single-Stream Throughput**: **78.9 – 79.9 tokens/s (~80 tok/s)**.
-  - **Under System Load (4-process regression running concurrently)**: 14.16 – 14.62 ms / token (70.6 tok/s).
+| Drafter | Target | Run shape | Latest board result |
+|---|---|---|---|
+| Gemma 4 E2B/E4B assistant | Gemma 4 (Q8_0, CPU) | AR drafter, K8 learned stop | r26: 61.0 – 61.5 tok/s short, 39.0 – 39.1 long |
+| **Qwen3 DFlash** (z-lab, block 16 QAT) | Qwen3-4B | Block draft, rows 1–15 are candidates | r55: 45.5 tok/s short8; ORACLE_OK on 153 rounds (two streams) |
+| Qwen3 cflash variant C | Qwen3-4B | Reads Target K/V (layers 1/12/22/33) | r55: 47.4 – 47.8 tok/s short8; ORACLE_OK on 166 rounds |
+| Qwen3 EAGLE-3 | Qwen3-4B | Chain drafter, early stop 16 | One stream; not in the r55 gate |
 
-- **Off-Chip DRAM Bandwidth (`m01_axi`, DATA_CLK 300 MHz)**:
-  - 512-bit AXI4 interface provides a theoretical bus peak of **19.2 GB/s** (300 MHz × 64 B), fully saturating up to the Alveo U200 single DDR4 bank hardware ceiling of **16.8 GB/s** (16,809.6 MB/s measured via `xrt-smi validate -r mem-bw`).
-- **Numerical Integrity & Reliability Verification**:
-  - `cda` (20/20 bit-exact), `lm16` (66/66 checks), `lm32`/`lm32high` (130/130 checks) 100% Bit-Exact verified against golden oracle models.
-  - 64 MiB round-trip DRAM SHA256 checksum exact match (0 bit errors).
+- **DFlash and cflash at r55** share one config: SFUC chain c1, G1 INT8 hold, F3 norm fold, H1 SFUC source in SRAM, L1 CDA early producer, landing overlap `all`, D4, C2 softmax reduce RF, C4 FWHT `i3`, GLU hide, session spin 200 ms and **two command streams**. DFlash also runs O1 context pre-run, prompt pre-run and D1 layer-0 table.
+- **Bottleneck**: the Host verify takes about two thirds of a round (r44 DFlash short8: 87.8 of 135.4 ms). Draft and verify run in series. The CPU idles during draft. The U200 idles during verify.
+- r55 programs run only on the r55 image. The runner checks the image fingerprint.
+- **Numerics**: `cda` 20/20, `lm16` 66/66, `lm32`/`lm32high` 130/130 bit-exact against oracle models. A 64 MiB DRAM round trip matches by SHA-256.
+- hw_emu is functionally exact. It is not cycle-faithful for DDR traffic.
 
-### 5.5 Memory Subsystem Bandwidth and Saturation
-
-| Subsystem Channel | Controller Instance | Bus Width & Clock | Peak Bandwidth | Sustained / Measured Bandwidth | Latency | Primary Function |
-|---|---|---|---:|---:|:---:|---|
-| **On-Chip L2 AXI SRAM** | `u_mic_sp`<br>(`RAM_TYPE=0`) | 512-bit<br>@ 300 MHz | **19.2 GB/s** | **19.2 GB/s**<br>(**1.000 beat/cycle**) | **10 cycles** | - 20 MiB distributed URAM (640 blocks)<br>- Zero-bubble KV Cache & activation serving<br>- Credit-based non-blocking arbiter |
-| **Off-Chip DDR0 DRAM** | `u_mic_sp_dram`<br>(`RAM_TYPE=1`) | 512-bit<br>@ 300 MHz | **19.2 GB/s** | **16.8 GB/s**<br>(DDR4 Bank Limit) | Round-trip DRAM latency | - Dedicated `m01_axi` port (Outstanding 256)<br>- Streaming continuous weight matrices<br>- 4 KiB boundary splitting & 64B alignment |
-
-- **On-Chip L2 SRAM (`u_mic_sp`) 300 MHz Key Saturation Points**:
-  - **Read Stream (1 to 8 concurrent clients)**: Sustains continuous **1.000 beat/cycle (19.200 GB/s)** without bubble insertion.
-  - **Write Stream (Interleaved burst clients)**: Saturates up to **19.200 GB/s**.
-  - **Full-Duplex Concurrent Load (8 Read + 3 Write clients)**: Sustains **38.400 GB/s (100% bus capacity)** under full saturation and ready-stall conditions.
+The r25 test log (xclbin SHA-256 `5b517dea7eb526a45e9045c6db5f994a798476ab4a13d6f09194dd79c0d0fcb0`) is in git history.
 
 ---
 
-## 6. Host Software and Control ABI
+## 5. Host ABI
 
-To eliminate PCIe MMIO latency overheads (reads ~1,000 ns, writes ~47 ns), TiAccel establishes a strict Host ABI contract:
+PCIe MMIO reads cost ~1,000 ns and writes ~47 ns. The Host ABI avoids both:
 
-1. **Consumer-First Launch Protocol**: The receiving consumer engine is armed first before clearing previous status via W1C and issuing the launch trigger, preventing pipeline deadlocks.
-2. **Two-Descriptor (D0/D1) Ping-Pong Registers**: Each engine maintains two descriptor sets, allowing the Host to prefetch and configure upcoming operations without interrupting active execution.
-3. **Write Elision (Delta-Writing)**: The Host driver skips unchanged register writes between consecutive launches, achieving a 3.3× reduction in MMIO dispatch latency.
+1. **Consumer-first launch**: arm the receiving engine, W1C the previous done, launch, wait for the terminal.
+2. **D0/D1 descriptors**: each engine has two descriptor banks. A write lands on the next launch of its bank.
+3. **Write elision**: the Host writes only registers that differ from the previous launch (3.3× less MMIO latency).
+4. **Command ring**: the sequencer reads command streams from host memory. This is the default in the shipped run configs.
 
 ---
 
-## 7. Reproducibility and Intellectual Property
+## 6. Reproducibility
 
-- **Verification Toolchain**: AMD Vivado v2024.2 / Vitis v2024.2, XRT 2.19.194 (Ubuntu 24.04 LTS).
-- **Code Availability**: Core RTL modules are packaged with standard **IEEE 1735 encryption** to support double-blind peer review and independent evaluation. Users can execute Simulation, Synthesis, Implementation, and Bitstream generation directly within AMD Vivado.
-
+- Toolchain: Vivado/Vitis 2024.2, XRT 2.19.194, Ubuntu 24.04.
+- Core RTL is released with IEEE 1735 encryption for double-blind review. Simulation, synthesis, implementation and bitstream generation run in Vivado.
