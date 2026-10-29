@@ -50,6 +50,11 @@ Sources: [kernel utilization](../build/k19_pnr_r56_20261028/reports/kernel_util_
 
 ## On-Board Results
 
+<p align="center">
+  <img src="fig/demo.gif" width="800" alt="Interactive chat demo on the U200">
+  <br><em>Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only.</em>
+</p>
+
 Qwen3-4B Q8_0 Target, DFlash z-lab block 16, Ryzen 9 9950X, U200 r56 at 300 MHz.
 The table reports mean decode throughput over two repetitions, each with eight prompts.
 
