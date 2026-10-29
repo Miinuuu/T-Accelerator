@@ -1,7 +1,21 @@
-# T-Accelerator: Transformer Integrated Accelerator
+# TiACCEL — Tensor Integrated Accelerator
 
-> [!NOTE]
-> Heterogeneous LLM-inference accelerator on the AMD Alveo U200. This page summarizes the architecture, the 300 MHz signoff and the on-board results. Status date: 2026-10-27 (image r55).
+<div align="center">
+
+**FPGA Acceleration for Speculative Decoding**
+
+CPU Target + U200 Drafter
+
+![Platform](https://img.shields.io/badge/AMD-Alveo_U200-152B45?style=flat-square)
+![Clock](https://img.shields.io/badge/DATA_CLK-300_MHz-536DFE?style=flat-square)
+![Image](https://img.shields.io/badge/Image-r56-00897B?style=flat-square)
+![Tools](https://img.shields.io/badge/Vivado_%2F_Vitis-2024.2-7E57C2?style=flat-square)
+
+[Architecture](#2-architecture) · [Implementation](#3-physical-implementation) · [Board results](#4-on-board-results) · [Reproducibility](#6-reproducibility)
+
+</div>
+
+> Heterogeneous LLM inference on the AMD Alveo U200. Current image: **r56**. Physical implementation updated from the **2026-10-29 routed reports**; board results below retain their original image and measurement conditions.
 
 **Platform**: AMD Alveo U200 (`xcu200-fsgd2104-2-e`), `DATA_CLK` 300.00 MHz, Vivado/Vitis 2024.2, XRT 2.19.194.
 
@@ -11,7 +25,7 @@
 
 | Metric | Value | Basis |
 |---|---|---|
-| Timing, current image **r55** | WNS **+0.017 ns**, WHS +0.004 ns, 0 failing endpoints | Post-route, 2026-10-27 |
+| Timing, current image **r56** | WNS **+0.017 ns**, WHS +0.004 ns, 0 failing endpoints | Post-route, 2026-10-29 |
 | Compute | **1,024 DSP48E2** TPU (PM16 × TC128) | RTL |
 | On-chip memory | 20 MiB URAM AXI SRAM + 1 MiB BRAM TUBUF | Fixed in all images |
 | SRAM bandwidth | 19.2 GB/s simplex, 38.4 GB/s duplex (512-bit @ 300 MHz) | Generated-IP simulation |
@@ -26,19 +40,19 @@ Host: AMD Ryzen 9 9950X runs the Target model (`llama.cpp`, Q8_0). The U200 runs
 
 ## 2. Architecture
 
-LLM decode is memory-bound. T-Accelerator keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
+LLM decode is memory-bound. TiACCEL keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
 
 ```
 Host MMIO → TDMC → TUBUF → TOSC → TPU → TACC → SFUC → MIC-SP → SRAM | DDR
 ```
 
 <p align="center">
-  <img src="fig/top.png" width="900" alt="T-Accelerator top-level block diagram">
+  <img src="fig/top.png" width="900" alt="TiACCEL top-level block diagram">
   <br><em>Figure 1. Top-level block diagram across the three SLRs (<a href="fig/top.pdf">PDF</a>)</em>
 </p>
 
 <p align="center">
-  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="T-Accelerator subsystem schematic">
+  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="TiACCEL subsystem schematic">
   <br><em>Figure 2. Top-level subsystem schematic</em>
 </p>
 
@@ -67,29 +81,39 @@ Timing closes at 300 MHz with `Congestion_SSI_SpreadLogic_high` and locality-awa
   <br><em>Figure 3. Pblock partitioning</em>
 </p>
 
-### Timing (r55, post-route physopt)
+### Timing (r56, post-route physopt)
 
 | WNS | TNS | WHS | THS | Failing endpoints |
 |---:|---:|---:|---:|---:|
-| +0.017 ns | 0.000 ns | +0.004 ns | 0.000 ns | 0 of 2,093,782 |
+| +0.017 ns | 0.000 ns | +0.004 ns | 0.000 ns | 0 setup / 0 hold |
 
-The r55 build has total SLL use of 15,065 (SLR2↔SLR1 52.8 %, SLR1↔SLR0 34.4 %).
+The r56 build uses **15,089 SLLs**: SLR2↔SLR1 **52.93%**, SLR1↔SLR0 **34.39%**.
 
-### Utilization (latest report in hand: r25)
+### Utilization (r56 · routed)
 
-| Resource | Full chip | Kernel only |
-|---|---:|---:|
-| CLB LUTs | 498,988 (42.21 %) | 306,582 |
-| CLB FFs | 642,008 (27.15 %) | 372,621 |
-| URAM | 660 (68.75 %) | 640 |
-| BRAM tiles | 903.5 (41.83 %) | 635.5 |
-| DSP48E2 | 1,331 (19.46 %) | 1,321 |
+| Resource | Used | Available | Utilization |
+|---|---:|---:|---:|
+| CLB LUTs | 551,436 | 1,182,240 | **46.64%** |
+| CLB registers | 678,460 | 2,364,480 | **28.69%** |
+| BRAM tiles | 957 | 2,160 | **44.31%** |
+| URAM | 660 | 960 | **68.75%** |
+| DSPs | 1,425 | 6,840 | **20.83%** |
 
-Main kernel consumers (LUT / DSP): SFUC 140,853 / 225, TPU 37,347 / 1,024, MIC-SP DRAM 29,513 / 0, MIC-SP SRAM 27,024 / 0, TACC 23,707 / 64. The r55 full-chip utilization report is not in this repository.
+Full-design totals include the platform shell. Counts sum SLR0–SLR2; percentages use full-device capacity. These are implementation resource counts, not runtime engine activity.
+
+| SLR | LUT utilization | URAM utilization | DSP utilization |
+|---|---:|---:|---:|
+| SLR0 | 48.31% | 80.00% | 11.32% |
+| SLR1 | 55.41% | 46.25% | 0.31% |
+| SLR2 | 36.21% | 80.00% | 50.88% |
+
+Sources: [routed utilization](../build/k19_pnr_r56_20261028/reports/slr_util_routed.rpt), [post-route timing](../build/k19_pnr_r56_20261028/reports/hw_bb_locked_timing_summary_postroute_physopted.rpt), [build snapshot](../build/k19_pnr_r56_20261028/SNAPSHOT.txt). Design: `level0_wrapper`, Vivado 2024.2, report date 2026-10-29.
 
 ---
 
 ## 4. On-Board Results
+
+> The following measurements are historical **r55** results. They are not r56 performance measurements. Current execution defaults are maintained in the [run configs](../sw/spec/configs) and [image settings](../build/xrt/board/image.sh).
 
 <p align="center">
   <img src="fig/demo.gif" width="800" alt="Interactive chat demo on the U200">
@@ -106,7 +130,7 @@ Main kernel consumers (LUT / DSP): SFUC 140,853 / 225, TPU 37,347 / 1,024, MIC-S
 - **DFlash draft (r55 board, 221 rounds, 8 prompts)**: one block pass of 16 rows (anchor + 15 draft tokens) takes 24.9 ms on the device, about **600 tok/s** without predraft. Predraft starts the next block during verify and hits in 87 % of rounds, so the exposed wait falls to 17.9 ms/round (about 840 tok/s equivalent). AL is 4.40 tokens/round, about 245 accepted tok/s on the exposed wait.
 - **DFlash and cflash at r55** share one config: SFUC chain c1, G1 INT8 hold, F3 norm fold, H1 SFUC source in SRAM, L1 CDA early producer, landing overlap `all`, D4, C2 softmax reduce RF, C4 FWHT `i3`, GLU hide, session spin 200 ms and **two command streams**. DFlash also runs O1 context pre-run, prompt pre-run and D1 layer-0 table.
 - **Bottleneck**: the Host verify takes about two thirds of a round. Draft and verify run in series. The CPU idles during draft. The U200 idles during verify.
-- r55 programs run only on the r55 image. The runner checks the image fingerprint.
+- The runner checks the image fingerprint. Programs must match their image contract.
 - **Numerics (r25)**: `cda` 20/20, `lm16` 66/66, `lm32`/`lm32high` 130/130 bit-exact against oracle models. A 64 MiB DRAM round trip matches by SHA-256.
 - hw_emu is functionally exact. It is not cycle-faithful for DDR traffic.
 
