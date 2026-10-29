@@ -1,4 +1,4 @@
-# TiACCEL — Tensor Integrated Accelerator
+# T-Accelerator — Integrated Tensor Accelerator
 
 <div align="center">
 
@@ -40,19 +40,19 @@ Host: AMD Ryzen 9 9950X runs the Target model (`llama.cpp`, Q8_0). The U200 runs
 
 ## 2. Architecture
 
-LLM decode is memory-bound. TiACCEL keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
+LLM decode is memory-bound. T-Accelerator keeps KV cache and activations on chip. One shared datapath serves dense and attention ops. There is no bypass.
 
 ```
 Host MMIO → TDMC → TUBUF → TOSC → TPU → TACC → SFUC → MIC-SP → SRAM | DDR
 ```
 
 <p align="center">
-  <img src="fig/top.png" width="900" alt="TiACCEL top-level block diagram">
+  <img src="fig/top.png" width="900" alt="T-Accelerator top-level block diagram">
   <br><em>Figure 1. Top-level block diagram across the three SLRs (<a href="fig/top.pdf">PDF</a>)</em>
 </p>
 
 <p align="center">
-  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="TiACCEL subsystem schematic">
+  <img src="fig/tiaccel_blocks_schematic.png" width="900" alt="T-Accelerator subsystem schematic">
   <br><em>Figure 2. Top-level subsystem schematic</em>
 </p>
 
