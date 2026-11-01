@@ -55,6 +55,11 @@ Sources: [kernel utilization](reports/r57_kernel_util_routed.rpt),
   Recorded on the r57 diagnostic image (r57 logic plus passive trace).</em>
 </p>
 
+<p align="center">
+  <img src="fig/demo.gif" width="800" alt="Interactive Gemma chat demo on the U200">
+  <br><em>Interactive chat demo with Gemma (<code>run_gemma.sh chat</code>). Illustration only.</em>
+</p>
+
 Qwen3-4B Q8_0 Target, DFlash z-lab block 16, Ryzen 9 9950X, U200 at 300 MHz.
 Each table reports mean decode throughput over two repetitions, each with eight prompts.
 
