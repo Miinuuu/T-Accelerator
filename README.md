@@ -50,8 +50,9 @@ Sources: [kernel utilization](reports/r57_kernel_util_routed.rpt),
 ## On-Board Results
 
 <p align="center">
-  <img src="fig/demo.gif" width="800" alt="Interactive chat demo on the U200">
-  <br><em>Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only.</em>
+  <img src="fig/demo_dflash.gif" width="800" alt="Interactive DFlash chat demo on the U200">
+  <br><em>Interactive chat demo: Qwen3-4B Q8_0 Target + DFlash z-lab block 16 drafter on the U200 (<code>run_qwen3.sh chat</code>).
+  Recorded on the r57 diagnostic image (r57 logic plus passive trace).</em>
 </p>
 
 Qwen3-4B Q8_0 Target, DFlash z-lab block 16, Ryzen 9 9950X, U200 at 300 MHz.
