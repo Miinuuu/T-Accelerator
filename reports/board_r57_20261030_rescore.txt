@@ -1,0 +1,28 @@
+# r57 deployed DFlash config, head rescore off (A) vs q8 (B). Log paths removed.
+main 16f69746e swdiff=eb138c4446d4f07c rtl=4e6c0de1 script=71164f1a cores=0-15,28-31 start=2026-10-30_03:44:58
+governor  32 powersave;
+xclbin r57=ed62a3b6 shim=5dfc0aa6 runner_before=77e47141
+warm_A runner=024fee02
+warm_B runner=024fee02
+oracle_A ORACLE_OK rounds=153 busy_before=0.06
+oracle_B ORACLE_OK rounds=140 busy_before=0.06
+A_short96_r1 rounds=153 draft=15.67 replay=21.39 python=-6.23 requests=1.00 apply=0.16 verify=86.57 tok_s=49.00 TOKSAME SAME busy_before=0.05
+B_short96_r1 rounds=140 draft=15.84 replay=21.44 python=-6.29 requests=1.00 apply=0.16 verify=86.76 tok_s=53.35 TOKSAME SAME busy_before=0.05
+A_med96_r1 rounds=150 draft=17.89 replay=23.58 python=-6.31 requests=1.00 apply=0.17 verify=91.95 tok_s=46.53 TOKSAME SAME busy_before=0.05
+B_med96_r1 rounds=163 draft=17.82 replay=23.53 python=-6.43 requests=1.00 apply=0.16 verify=91.36 tok_s=43.08 TOKSAME SAME busy_before=0.09
+A_short256_r1 rounds=367 draft=15.92 replay=22.16 python=-6.77 requests=1.00 apply=0.16 verify=89.14 tok_s=47.48 TOKSAME SAME busy_before=0.05
+B_short256_r1 rounds=348 draft=16.20 replay=22.14 python=-6.64 requests=1.00 apply=0.17 verify=88.90 tok_s=50.05 TOKSAME SAME busy_before=0.07
+B_short256_r2 rounds=348 draft=16.38 replay=22.29 python=-6.59 requests=1.00 apply=0.17 verify=89.93 tok_s=49.48 TOKSAME SAME busy_before=0.05
+A_short256_r2 rounds=367 draft=16.02 replay=22.17 python=-6.67 requests=1.00 apply=0.17 verify=89.88 tok_s=47.11 TOKSAME SAME busy_before=0.10
+B_med96_r2 rounds=163 draft=17.80 replay=23.59 python=-6.52 requests=1.00 apply=0.18 verify=92.54 tok_s=42.62 TOKSAME SAME busy_before=0.12
+A_med96_r2 rounds=150 draft=17.85 replay=23.56 python=-6.25 requests=1.00 apply=0.18 verify=92.13 tok_s=46.47 TOKSAME SAME busy_before=0.11
+B_short96_r2 rounds=140 draft=15.79 replay=21.46 python=-6.32 requests=1.00 apply=0.17 verify=87.74 tok_s=52.88 TOKSAME SAME busy_before=0.12
+A_short96_r2 rounds=153 draft=15.45 replay=21.35 python=-6.38 requests=1.00 apply=0.17 verify=86.67 tok_s=49.06 TOKSAME SAME busy_before=0.07
+done 2026-10-30_04:36:55 runner=024fee02
+short96 A->B draft 15.56->15.81 (+0.26) replay 21.37->21.45 verify +0.73% tok_s 49.03->53.12 (+8.33%; reps +8.88/+7.79)
+med96 A->B draft 17.87->17.81 (-0.06) replay 23.57->23.56 verify -0.10% tok_s 46.50->42.85 (-7.85%; reps -7.41/-8.28)
+short256 A->B draft 15.97->16.29 (+0.32) replay 22.16->22.21 verify -0.11% tok_s 47.30->49.77 (+5.22%; reps +5.41/+5.03)
+mean tok_s B vs A +1.90% draft B - A +0.17 ms
+PREDICTION HIT
+VERDICT GAIN rule=MET
+GATE_PASS

@@ -1,0 +1,38 @@
+# Same-day CPU-only vs U200 comparison on r56. C = our CPU loop, N = native llama.cpp loop, U = U200. Log paths removed.
+main 8ddb70e7f image=default(DEFAULT_IMAGE=r56) gguf=45e4bce4d92cd669 target=865fbdcb8119c5cd script=4edb268a start=2026-10-29_14:22:58
+governor  32 powersave;
+C12_short96_r1 rc=0 busy_before=0.12 rounds=148 tok_per_round=5.189 draft=21.34 replay=0.00 verify=90.28 tok_s=45.83 TOKSAME shield=None
+C12_med96_r1 rc=0 busy_before=0.11 rounds=150 tok_per_round=5.120 draft=22.41 replay=0.00 verify=97.06 tok_s=42.26 TOKSAME shield=None
+C12_short256_r1 rc=0 busy_before=0.16 rounds=348 tok_per_round=5.270 draft=21.46 replay=0.00 verify=92.67 tok_s=45.51 TOKSAME shield=None
+C16_short96_r1 rc=0 busy_before=0.07 rounds=148 tok_per_round=5.189 draft=20.22 replay=0.00 verify=87.05 tok_s=47.65 TOKSAME shield=None
+C16_med96_r1 rc=0 busy_before=0.09 rounds=150 tok_per_round=5.120 draft=21.04 replay=0.00 verify=91.75 tok_s=44.73 TOKSAME shield=None
+C16_short256_r1 rc=0 busy_before=0.11 rounds=348 tok_per_round=5.270 draft=20.50 replay=0.00 verify=88.97 tok_s=47.42 TOKSAME shield=None
+N16_short96_r1 rc=0 busy_before=0.05 tok_s=48.38 AL_est=4.923 TOKSAME
+N16_med96_r1 rc=0 busy_before=0.06 tok_s=45.40 AL_est=4.861 TOKSAME
+N16_short256_r1 rc=0 busy_before=0.10 tok_s=48.24 AL_est=5.195 TOKSAME
+N12_short96_r1 rc=0 busy_before=0.05 tok_s=46.30 AL_est=4.923 TOKSAME
+N12_med96_r1 rc=0 busy_before=0.08 tok_s=43.25 AL_est=4.861 TOKSAME
+N12_short256_r1 rc=0 busy_before=0.07 tok_s=46.12 AL_est=5.195 TOKSAME
+U_short96_r1 rc=0 busy_before=0.10 rounds=153 tok_per_round=5.020 draft=15.89 replay=21.86 verify=88.51 tok_s=47.98 TOKSAME shield=True
+U_med96_r1 rc=0 busy_before=0.07 rounds=150 tok_per_round=5.120 draft=19.53 replay=25.05 verify=94.13 tok_s=44.97 TOKSAME shield=True
+U_short256_r1 rc=0 busy_before=0.08 rounds=367 tok_per_round=4.997 draft=16.10 replay=22.84 verify=91.01 tok_s=46.57 TOKSAME shield=True
+U_short96_r2 rc=0 busy_before=0.07 rounds=153 tok_per_round=5.020 draft=15.57 replay=21.82 verify=88.81 tok_s=48.00 TOKSAME shield=True
+U_med96_r2 rc=0 busy_before=0.05 rounds=150 tok_per_round=5.120 draft=19.28 replay=25.31 verify=93.88 tok_s=45.16 TOKSAME shield=True
+U_short256_r2 rc=0 busy_before=0.09 rounds=367 tok_per_round=4.997 draft=16.41 replay=22.94 verify=91.08 tok_s=46.40 TOKSAME shield=True
+N12_short96_r2 rc=0 busy_before=0.05 tok_s=45.97 AL_est=4.923 TOKSAME
+N12_med96_r2 rc=0 busy_before=0.05 tok_s=43.60 AL_est=4.861 TOKSAME
+N12_short256_r2 rc=0 busy_before=0.06 tok_s=46.30 AL_est=5.195 TOKSAME
+N16_short96_r2 rc=0 busy_before=0.05 tok_s=48.40 AL_est=4.923 TOKSAME
+N16_med96_r2 rc=0 busy_before=0.09 tok_s=45.44 AL_est=4.861 TOKSAME
+N16_short256_r2 rc=0 busy_before=0.09 tok_s=48.22 AL_est=5.195 TOKSAME
+C16_short96_r2 rc=0 busy_before=0.07 rounds=148 tok_per_round=5.189 draft=20.23 replay=0.00 verify=86.19 tok_s=48.00 TOKSAME shield=None
+C16_med96_r2 rc=0 busy_before=0.06 rounds=150 tok_per_round=5.120 draft=20.85 replay=0.00 verify=91.28 tok_s=45.00 TOKSAME shield=None
+C16_short256_r2 rc=0 busy_before=0.05 rounds=348 tok_per_round=5.270 draft=20.59 replay=0.00 verify=89.37 tok_s=47.22 TOKSAME shield=None
+C12_short96_r2 rc=0 busy_before=0.05 rounds=148 tok_per_round=5.189 draft=21.07 replay=0.00 verify=89.59 tok_s=46.23 TOKSAME shield=None
+C12_med96_r2 rc=0 busy_before=0.05 rounds=150 tok_per_round=5.120 draft=21.95 replay=0.00 verify=95.53 tok_s=43.00 TOKSAME shield=None
+C12_short256_r2 rc=0 busy_before=0.04 rounds=348 tok_per_round=5.270 draft=21.42 replay=0.00 verify=91.89 tok_s=45.85 TOKSAME shield=None
+done 2026-10-29_14:52:20
+RESULT short96 C12=46.03 C16=47.83 N12=46.13 N16=48.39 U=47.99 U/N16=0.992 (-0.8%) MARGIN10=no
+RESULT med96 C12=42.63 C16=44.86 N12=43.42 N16=45.42 U=45.06 U/N16=0.992 (-0.8%) MARGIN10=no
+RESULT short256 C12=45.68 C16=47.32 N12=46.21 N16=48.23 U=46.48 U/N16=0.964 (-3.6%) MARGIN10=no
+CMP_PASS

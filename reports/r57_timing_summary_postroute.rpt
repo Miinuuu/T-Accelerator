@@ -1,0 +1,26 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2024.2 (lin64) Build 5239630 Fri Nov 08 22:34:34 MST 2024
+| Date              : Thu Oct 29 18:08:40 2026
+| Host              : (removed for review)
+| Command           : report_timing_summary -max_paths 10 -file hw_bb_locked_timing_summary_postroute_physopted.rpt -pb hw_bb_locked_timing_summary_postroute_physopted.pb -rpx hw_bb_locked_timing_summary_postroute_physopted.rpx -warn_on_violation
+| Design            : level0_wrapper
+| Device            : xcu200-fsgd2104
+| Speed File        : -2  PRODUCTION 1.28 03-30-2022
+| Design State      : Physopt postRoute
+| Temperature Grade : E
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+[Excerpt: Design Timing Summary section only. The full report is 16 MB.]
+
+------------------------------------------------------------------------------------------------
+| Design Timing Summary
+| ---------------------
+------------------------------------------------------------------------------------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+    -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+      0.016        0.000                      0              2098184        0.004        0.000                      0              2095388        0.000        0.000                       0                781186  
+
+
+All user specified timing constraints are met.

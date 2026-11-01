@@ -3,7 +3,7 @@
 **FPGA acceleration for speculative decoding: CPU Target + Alveo U200 Drafter.**
 
 The AMD Ryzen 9 9950X runs the Target model and verifies draft tokens. The U200 runs the drafter.
-Current image: **r56**, at **300 MHz**. Data below was measured or reported on **2026-10-29**.
+Current image: **r57**, at **300 MHz**. Data below was measured on **2026-10-29** and **2026-10-30**.
 
 ## Architecture
 
@@ -21,15 +21,14 @@ Current image: **r56**, at **300 MHz**. Data below was measured or reported on *
 | Control | Two command streams fetched from host memory. Registered credit crossings connect the three SLRs. |
 
 The drafter keeps KV cache and activations on chip. DFlash and cflash use the same compute hardware.
-See the [architecture contracts](../docs/architecture/README.md) for implementation details.
 
 ## Physical Implementation
 
-Alveo U200 (`xcu200-fsgd2104-2-e`), Vivado/Vitis 2024.2, r56 routed design.
+Alveo U200 (`xcu200-fsgd2104-2-e`), Vivado/Vitis 2024.2, r57 routed design.
 
 | Timing at 300 MHz | Result |
 |---|---:|
-| Setup slack (WNS) | +0.017 ns |
+| Setup slack (WNS) | +0.016 ns |
 | Hold slack (WHS) | +0.004 ns |
 | Failing endpoints | 0 setup / 0 hold |
 
@@ -37,16 +36,16 @@ Alveo U200 (`xcu200-fsgd2104-2-e`), Vivado/Vitis 2024.2, r56 routed design.
 
 | Resource | Used | User budget | Utilization |
 |---|---:|---:|---:|
-| LUT | 373,680 | 1,004,480 | 37.20% |
-| Registers | 420,000 | 2,106,020 | 19.94% |
+| LUT | 374,537 | 1,004,454 | 37.29% |
+| Registers | 419,937 | 2,106,023 | 19.94% |
 | BRAM tiles | 696 | 1,900 | 36.63% |
 | URAM | 640 | 940 | 68.09% |
 | DSP | 1,418 | 6,833 | 20.75% |
 
 LUT usage includes 27,155 LUTs used as memory. Percentages use the capacity remaining after the platform shell.
 
-Sources: [kernel utilization](../build/k19_pnr_r56_20261028/reports/kernel_util_routed.rpt),
-[post-route timing](../build/k19_pnr_r56_20261028/reports/hw_bb_locked_timing_summary_postroute_physopted.rpt).
+Sources: [kernel utilization](reports/r57_kernel_util_routed.rpt),
+[post-route timing summary](reports/r57_timing_summary_postroute.rpt) (excerpt).
 
 ## On-Board Results
 
@@ -55,29 +54,46 @@ Sources: [kernel utilization](../build/k19_pnr_r56_20261028/reports/kernel_util_
   <br><em>Interactive chat demo (<code>run_gemma.sh chat</code>). Illustration only.</em>
 </p>
 
-Qwen3-4B Q8_0 Target, DFlash z-lab block 16, Ryzen 9 9950X, U200 r56 at 300 MHz.
-The table reports mean decode throughput over two repetitions, each with eight prompts.
+Qwen3-4B Q8_0 Target, DFlash z-lab block 16, Ryzen 9 9950X, U200 at 300 MHz.
+Each table reports mean decode throughput over two repetitions, each with eight prompts.
 
-| Prompt set | Maximum new tokens | CPU + U200 (tok/s) | CPU-only (tok/s) |
+**Current deployment (r57, 2026-10-30).** The DFlash configuration uses 13 Target threads.
+The remaining three physical cores run Host and runner work. Runner L3 isolation and huge pages are enabled.
+Head rescore re-ranks the top two device candidates of each draft row with the Target's own Q8_0 LM head rows.
+
+| Prompt set | Maximum new tokens | Rescore off (tok/s) | Rescore on, deployed (tok/s) | Change |
+|---|---:|---:|---:|---:|
+| short8 | 96 | 49.03 | 53.12 | +8.33% |
+| med8 | 96 | 46.50 | 42.85 | −7.85% |
+| short8 | 256 | 47.30 | 49.77 | +5.22% |
+
+Rescore adds 0.17 ms of draft time per round on average.
+Most of the med8 loss comes from two code prompts. On these prompts, the Target's Q8_0 head drafts worse than the device head.
+All 12 timed runs passed token equality checks. Both oracle runs matched the device output.
+
+**CPU-only comparison (r56, 2026-10-29).** This is the most recent same-day comparison.
+The U200 configuration used 12 Target threads, with four physical cores reserved for Host and runner work.
+The CPU-only baseline uses the native `llama.cpp` DFlash loop with 16 threads.
+
+| Prompt set | Maximum new tokens | CPU + U200, r56 (tok/s) | CPU-only (tok/s) |
 |---|---:|---:|---:|
 | short8 | 96 | 47.99 | 48.39 |
 | med8 | 96 | 45.06 | 45.42 |
 | short8 | 256 | 46.48 | 48.23 |
 
-The U200 configuration uses 12 Target threads, with four physical cores reserved for Host and runner work.
-Runner L3 isolation and huge pages are enabled. The CPU-only baseline uses the native `llama.cpp` DFlash loop with 16 threads.
-The CPU drafter uses float-initialized Q8_0 weights. The U200 drafter uses QAT/codebook weights.
-
 All 30 runs in the comparison passed token equality checks.
-The U200 configuration is 0.8–3.6% below the native CPU-only baseline in these conditions.
+In these conditions, the r56 configuration was 0.8–3.6% below the native CPU-only baseline.
+The CPU drafter uses float-initialized Q8_0 weights. The U200 drafter uses QAT/codebook weights.
+There is no same-day measurement of r57 against CPU-only yet. Do not compare the two tables directly.
 
-Source: [board comparison and conditions](../docs/research/throughput.md#active-throughput-plan--cpu-vs-u200),
-[run results](../build/work/tpu/mac_eff/cmp/run/runs.txt).
+Sources: [r57 rescore runs](reports/board_r57_20261030_rescore.txt),
+[r56 CPU-only comparison runs](reports/board_r56_20261029_cpu_vs_u200.txt).
 
 ## Reproducibility
 
 - Toolchain: Vivado/Vitis 2024.2, XRT 2.19.194, Ubuntu 24.04.
-- [Image settings](../build/xrt/board/image.sh) and [run configs](../sw/spec/configs) define the execution defaults.
+- Image r57: xclbin SHA-256 prefix `ed62a3b6`, RTL tree SHA-256 prefix `4e6c0de1`.
 - The runner checks the image fingerprint before execution.
-- Core RTL uses IEEE 1735 encryption for double-blind review. Vivado supports simulation, synthesis, implementation and bitstream generation.
+- The reports in [`reports/`](reports) are excerpts from the private development repository. Host names and log paths are removed.
+- This repository does not contain RTL source yet. The planned release uses IEEE 1735 encryption of the core RTL for double-blind review.
 - `hw_emu` validates functionality. DDR timing and bandwidth require board measurements.
