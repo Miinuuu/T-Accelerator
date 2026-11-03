@@ -8,8 +8,12 @@ Current image: **r57**, at **300 MHz**. Data below was measured on **2026-10-29*
 ## Architecture
 
 <p align="center">
-  <img src="fig/top.png" width="900" alt="T-Accelerator top-level block diagram">
-  <br><em>Top-level architecture (<a href="fig/top.pdf">PDF</a>)</em>
+  <img src="fig/arch.png" width="900" alt="T-Accelerator architecture on the U200, one column per SLR">
+  <br><em>Architecture on the Alveo U200. Each column is one SLR (super logic region). The placement inside a column is schematic.
+  Operand streams go through the dense chain in SLR2 (TDMC, TUBUF, TOSC, TPU, TACC).
+  Results cross SLR1 through three register hops and a landing store, and go into the SFUC in SLR0.
+  The command fetch reads one ring per stream from host memory. The SLR1 sequencer writes the descriptor banks (D0/D1) of each engine.
+  The memory interconnect connects 8 read clients and 3 write clients to the on-chip SRAM (20 MiB across three SLRs) and DDR.</em>
 </p>
 
 | Component | Function |
@@ -21,6 +25,15 @@ Current image: **r57**, at **300 MHz**. Data below was measured on **2026-10-29*
 | Control | Two command streams fetched from host memory. Registered credit crossings connect the three SLRs. |
 
 The drafter keeps KV cache and activations on chip. DFlash and cflash use the same compute hardware.
+
+<p align="center">
+  <img src="fig/arch_detail.png" width="900" alt="Command sequencer and attention lowering">
+  <br><em>(a) Command sequencer. Two streams read their rings in host memory and send register writes (WR) through lanes.
+  WAITEV waits on counters of engine-bank completion and activity events and of semaphores.
+  (b) Attention lowering. Each 128-token target K/V page is directly the weight tile of an INT4 projection.
+  Attention runs as one QK and one PV dense launch per page, with several SFUC passes between them.
+  One SFUC box in the figure is several passes (<a href="fig/arch_detail.pdf">PDF</a>).</em>
+</p>
 
 ## Physical Implementation
 
