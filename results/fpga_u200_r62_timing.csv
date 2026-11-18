@@ -1,0 +1,2 @@
+kernel_clock_MHz,WNS_ns,TNS_failing_endpoints,WHS_ns,THS_failing_endpoints,all_constraints_met
+300,0.002,0,0.003,0,True
