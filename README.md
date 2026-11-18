@@ -33,6 +33,8 @@ Kernel only, without the platform shell. Per-block numbers are in [`results/`](r
 
 ![Vivado elaborated design of the streaming datapath](fig/vivado_rtl_datapath.png)
 
+![Vivado elaborated design of the memory interconnect and its clients](fig/vivado_rtl_memory.png)
+
 ASAP7 logic synthesis at 1 GHz (TT, 0.7 V) gives 0.634 mm² of logic and 0.75 W of logic power, not including the SRAM macros.
 The picture below is one placed-and-routed block, the command fetch unit (130.7 × 130.7 µm).
 
