@@ -17,7 +17,9 @@ Both GIFs replay measured board runs at their original speed. Rounds are spaced 
 
 ## Architecture
 
-![Architecture on the U200, one column per SLR](fig/arch.png)
+![Architecture: host, on-chip command path, streaming datapath and memory](fig/arch.png)
+
+The host writes each round as commands into two rings in host memory. The on-chip command path fetches them and fills the D0/D1 descriptor banks of the engines, so a launch needs no MMIO from the host.
 
 ## Implementation
 
